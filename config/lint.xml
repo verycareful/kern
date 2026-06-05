@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Android Lint configuration for Kern.
+  Hard project invariant: no network usage ever. Flag any network API misuse.
+-->
+<lint>
+    <!-- Kern declares no network permission; treat any network API call as an error. -->
+    <issue id="MissingPermission" severity="error" />
+    <!-- Keep accessibility honest for the editor UI. -->
+    <issue id="ContentDescription" severity="warning" />
+</lint>

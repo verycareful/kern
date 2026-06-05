@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Used by the Activity window theme before Compose draws.
+         The real palette lives in src/shared/theme/Color.kt. -->
+    <color name="kern_seed">#3F5B8B</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+</resources>

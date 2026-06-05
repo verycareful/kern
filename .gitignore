@@ -1,0 +1,46 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Kotlin
+*.class
+*.kotlin_module
+
+# NDK / Rust build artifacts
+*.so
+*.a
+obj/
+jniLibs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / tool config
+.obsidian/
+.vscode/
+
+# Dev workflow
+changes_version.md
+
+# Internal / not-for-public-repo: planning docs, ADRs, release roadmap,
+# session handoffs, and the UI design handoff bundle. Kept local only.
+.internal/
+# Claude working memory: stays on disk (auto-loaded each session) but is not
+# published, since it references the internal roadmap.
+CLAUDE.md
+
+# Environment
+.env
+.env.local
+
+# Test outputs
+test-results/

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kern</string>
+    <string name="browser_title">Kern</string>
+    <string name="browser_empty">No documents found in Documents or Downloads.</string>
+</resources>

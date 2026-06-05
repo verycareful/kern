@@ -1,0 +1,13 @@
+id,filename,format,size_kb,last_modified,opened_by,editable,notes
+1,quarterly_report.xlsx,Excel,248,2026-05-12,Kern,true,Contains Q1 sales pivot
+2,project_brief.docx,Word,85,2026-05-28,Kern,true,Needs final sign-off
+3,roadmap_2026.pptx,PowerPoint,1240,2026-04-30,Kern,true,Shared with investors
+4,invoice_00471.pdf,PDF,112,2026-06-01,Kern,true,MuPDF bridge test file
+5,contacts_export.csv,CSV,14,2026-06-02,Kern,true,CRM export
+6,employee_handbook.epub,EPUB,890,2026-03-15,Kern,false,View only in alpha
+7,budget_model.xlsx,Excel,560,2026-05-20,Kern,true,Finance team model
+8,onboarding_deck.pptx,PowerPoint,3400,2026-05-05,Kern,true,HR use
+9,legal_terms.pdf,PDF,204,2026-04-18,Kern,true,AGPL-3.0 compliance
+10,data_export_raw.csv,CSV,2048,2026-06-03,Kern,true,Large file stress test
+11,minutes_2026-05-28.docx,Word,42,2026-05-28,Kern,true,Board meeting minutes
+12,architecture_diagram.pdf,PDF,318,2026-05-10,Kern,true,Kern internal docs

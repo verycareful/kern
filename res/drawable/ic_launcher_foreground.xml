@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Kern brand mark (the navy chevron "k"). Translated from brand/kern-mark.svg:
+  two 800x1024 rects rotated 45 deg / 135 deg, fill #020c3b. The rotations are
+  baked into the absolute path coordinates so this renders identically to the SVG.
+  Full-bleed by design; the white chevron notch is the background layer showing through.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <path
+        android:fillColor="#020C3B"
+        android:pathData="M223,-389 L789,177 L65,901 L-501,335 Z M789,847 L223,1413 L-501,689 L65,123 Z" />
+</vector>

@@ -1,0 +1,3 @@
+# Unit tests (JVM) mirror src/ structure here. Per the versioning scheme, test
+# code lands in the .1 patch slot (0.1.0.1 is the first test-only release).
+# Instrumented (device) tests go under tests/instrumented/.
