@@ -2,6 +2,12 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.4.0] - 2026-06-05 19:24 IST
+### Added
+- PowerPoint editor (.pptx via Apache POI): open, navigate slides, edit each slide's text boxes, save in place, and export a copy
+- Pinch-to-zoom on the slide
+- Note: text editing only (POI cannot render slide graphics on Android); saving replaces only edited text shapes and preserves the rest
+
 ## [0.1.3.0] - 2026-06-05 19:14 IST
 ### Added
 - Word editor (.docx via Apache POI): open, view, and edit paragraph text on a page, save in place, and export a copy

@@ -12,9 +12,9 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: 0.1.3.0 = Alpha, Major 1, Minor 3 (Word), initial of the minor.
-        versionCode = 4
-        versionName = "0.1.3.0"
+        // A.B.C.D versioning: 0.1.4.0 = Alpha, Major 1, Minor 4 (PowerPoint), initial of the minor.
+        versionCode = 5
+        versionName = "0.1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
