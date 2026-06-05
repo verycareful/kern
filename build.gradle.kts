@@ -12,9 +12,9 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: 0.1.0.0 = Alpha, Major 1, Minor 0, initial.
-        versionCode = 1
-        versionName = "0.1.0.0"
+        // A.B.C.D versioning: 0.1.1.0 = Alpha, Major 1, Minor 1 (CSV), initial of the minor.
+        versionCode = 2
+        versionName = "0.1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -72,6 +72,8 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
 
     implementation(platform(libs.androidx.compose.bom))

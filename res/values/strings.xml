@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">Kern</string>
     <string name="browser_title">Kern</string>
-    <string name="browser_empty">No documents found in Documents or Downloads.</string>
+    <string name="browser_empty">Tap \"Open file\" to choose a document. Kern edits it in place - nothing is copied or uploaded.</string>
 </resources>

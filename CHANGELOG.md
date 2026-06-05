@@ -2,6 +2,17 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.1.0] - 2026-06-05 18:33 IST
+### Added
+- CSV editor: open a document via the system file picker, view it as a scrollable grid, edit cells, and save in place
+- Export a copy (Save as) via the system create-document picker
+- Add row and add column
+- Shared document I/O (read/write at the `content://` URI) and an editor ViewModel pattern, reused by the upcoming Office editors
+- "Open file" action on the home screen (no storage permission required)
+
+### Results
+- Verified by manual and on-device testing over USB. No automated test suite in this release (suites are batched after 0.1.4.0).
+
 ## [0.1.0.0] - 2026-06-05 18:12 IST
 ### Added
 - Project scaffold: Gradle (Kotlin DSL) with a version catalog, Kotlin, and Jetpack Compose; package `dev.kern`, min API 26 / target 35
