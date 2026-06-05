@@ -2,6 +2,16 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.2.0] - 2026-06-05 18:53 IST
+### Added
+- Excel editor (.xlsx via Apache POI): open, view, edit cells, save in place, and export a copy
+- Multi-sheet workbooks: switch between sheets via a sheet bar; edits are tracked per sheet
+- Formula cells display their cached value (no recalculation in alpha); saving preserves untouched cells, formulas, and formatting
+
+### Changed
+- Extracted a shared grid-editor UI (`GridEditorScreen`) now used by both the CSV and Excel editors
+- Pinch-to-zoom in the spreadsheet grid (CSV and Excel); a reusable gesture that will extend to the other editors
+
 ## [0.1.1.0] - 2026-06-05 18:33 IST
 ### Added
 - CSV editor: open a document via the system file picker, view it as a scrollable grid, edit cells, and save in place
