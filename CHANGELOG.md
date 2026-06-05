@@ -2,6 +2,15 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.3.0] - 2026-06-05 19:14 IST
+### Added
+- Word editor (.docx via Apache POI): open, view, and edit paragraph text on a page, save in place, and export a copy
+- Headings/title paragraphs are shown with their style; saving replaces only edited paragraphs and preserves the rest
+- Pinch-to-zoom on the document page
+
+### Changed
+- Extracted a shared editor chrome (`EditorChrome`: top bar, save state, save/export) now used by the Word editor (and the upcoming slide editor)
+
 ## [0.1.2.0] - 2026-06-05 18:53 IST
 ### Added
 - Excel editor (.xlsx via Apache POI): open, view, edit cells, save in place, and export a copy
