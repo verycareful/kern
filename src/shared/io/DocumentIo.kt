@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import java.io.File
 import java.io.IOException
 
 /**
@@ -16,9 +17,16 @@ import java.io.IOException
 object DocumentIo {
 
     /** Reads the whole document as bytes. Throws IOException if the URI can't be opened. */
-    fun readBytes(context: Context, uri: Uri): ByteArray =
-        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    fun readBytes(context: Context, uri: Uri): ByteArray {
+        // Files from the in-app browser scan arrive as file:// URIs (MANAGE_EXTERNAL_STORAGE);
+        // read them directly. SAF content:// URIs go through the resolver.
+        if (uri.scheme == "file") {
+            return uri.path?.let { File(it).readBytes() }
+                ?: throw IOException("Invalid file URI $uri")
+        }
+        return context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IOException("Could not open $uri for reading")
+    }
 
     /** Reads the whole document as UTF-8 text. */
     fun readText(context: Context, uri: Uri): String =
@@ -26,6 +34,10 @@ object DocumentIo {
 
     /** Overwrites the document with [bytes] (truncating any previous content). */
     fun writeBytes(context: Context, uri: Uri, bytes: ByteArray) {
+        if (uri.scheme == "file") {
+            uri.path?.let { File(it).writeBytes(bytes) } ?: throw IOException("Invalid file URI $uri")
+            return
+        }
         context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
             ?: throw IOException("Could not open $uri for writing")
     }
@@ -36,6 +48,7 @@ object DocumentIo {
 
     /** The user-facing file name for a URI, falling back to the last path segment. */
     fun displayName(context: Context, uri: Uri): String {
+        if (uri.scheme == "file") return uri.path?.let { File(it).name } ?: "document"
         context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor ->
                 if (cursor.moveToFirst()) {

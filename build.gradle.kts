@@ -12,9 +12,9 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: 0.1.6.0 = Alpha, Major 1, Minor 6 (EPUB), initial of the minor.
-        versionCode = 7
-        versionName = "0.1.6.0"
+        // A.B.C.D versioning: 0.1.7.0 = Alpha, Major 1, Minor 7 (file browser), initial of the minor.
+        versionCode = 8
+        versionName = "0.1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

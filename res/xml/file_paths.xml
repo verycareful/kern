@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider paths for "Share a copy". Covers external storage (Documents,
+  Downloads, etc.), which is where the browser scans. Read-only, granted per share.
+-->
+<paths>
+    <external-path name="external" path="." />
+</paths>

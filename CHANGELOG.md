@@ -2,6 +2,26 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.0] - 2026-06-06 22:59 IST
+### Added
+- File browser home screen: lists the documents in your Documents and Downloads folders (read in place, never copied)
+- Recent and All-files views; pinned favorites; search by name; per-format filter chips; list/grid layout toggle
+- Sort by date modified, name, size, or type (tap the active field again to reverse direction)
+- Per-file actions: open, pin/unpin, share a copy, file info, and delete (with confirmation)
+- Storage-access gate: requests `MANAGE_EXTERNAL_STORAGE` (API 30+) or `READ_EXTERNAL_STORAGE` (below), with a clear no-network rationale; the system file picker remains as a fallback for files elsewhere
+- Pins and recents persist locally via SharedPreferences (no new dependency)
+
+### Changed
+- `DocumentIo` now reads/writes `file://` URIs directly, so editors work on browsed files as well as SAF documents
+- Centralized per-format identity (hue + short tag) in `FormatStyle`, shared by the browser
+- Added a `FileProvider` so "Share a copy" can hand other apps a read-only copy
+
+### Fixed
+- Storage permissions are now requested at launch (with a rationale) and files opened from the browser save via direct path. Previously the permissions were declared but never requested, so direct-path saves silently failed (closes #5)
+
+### Results
+- Verified by manual and on-device testing over USB. No automated test suite in this release (suites remain batched, deferred from 0.1.4.0).
+
 ## [0.1.6.0] - 2026-06-06 22:25 IST
 ### Added
 - EPUB editor: open an `.epub`, read it chapter by chapter, edit chapter text in place, save in place, and export a copy
