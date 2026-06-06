@@ -12,9 +12,9 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: 0.1.5.0 = Alpha, Major 1, Minor 5 (PDF), initial of the minor.
-        versionCode = 6
-        versionName = "0.1.5.0"
+        // A.B.C.D versioning: 0.1.6.0 = Alpha, Major 1, Minor 6 (EPUB), initial of the minor.
+        versionCode = 7
+        versionName = "0.1.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -98,6 +98,8 @@ dependencies {
     implementation(libs.poi)
     implementation(libs.poi.ooxml)
     implementation(libs.opencsv)
+    // EPUB (0.1.6.0): ZIP container parsed in-house, XHTML via Jsoup.
+    implementation(libs.jsoup)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

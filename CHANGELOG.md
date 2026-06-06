@@ -2,6 +2,20 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.6.0] - 2026-06-06 22:25 IST
+### Added
+- EPUB editor: open an `.epub`, read it chapter by chapter, edit chapter text in place, save in place, and export a copy
+- Table-of-contents sheet (from the EPUB3 nav or EPUB2 NCX) to jump to any chapter, plus prev/next chapter navigation and a `chapter n / total` indicator
+- Pinch-to-zoom on the chapter page
+- Editing is at block granularity (paragraphs and headings via Jsoup); saving re-opens the original archive and rewrites only edited chapter files, preserving every other entry, the `mimetype` (stored first), images, CSS, and metadata. An edited block's inline formatting collapses to plain text (the same tradeoff as Word paragraphs)
+- DRM-protected EPUBs are detected and reported as non-editable (font-obfuscation-only archives are still editable)
+
+### Changed
+- `DocumentFormat.EPUB` now routes to the EPUB editor (previously fell through to the PDF route)
+
+### Results
+- Verified by manual and on-device testing over USB. No automated test suite in this release (suites remain batched, deferred from 0.1.4.0).
+
 ## [0.1.5.0] - 2026-06-06 13:28 IST
 ### Added
 - PDF viewer (Android framework `PdfRenderer`): open a PDF, scroll through pages, pinch-to-zoom, a page indicator, and export a copy. Viewing needs no native code.

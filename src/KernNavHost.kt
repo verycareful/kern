@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.kern.browser.FileBrowserScreen
 import dev.kern.editors.csv.CsvEditorScreen
+import dev.kern.editors.epub.EpubEditorScreen
 import dev.kern.editors.excel.ExcelEditorScreen
 import dev.kern.editors.pdf.PdfEditorScreen
 import dev.kern.editors.pptx.PptEditorScreen
@@ -30,6 +31,7 @@ object Destinations {
     const val WORD = "word"
     const val POWERPOINT = "pptx"
     const val PDF = "pdf"
+    const val EPUB = "epub"
 
     /** Route a resolved format to its editor destination base (without the argument). */
     fun routeFor(format: DocumentFormat): String = when (format) {
@@ -38,8 +40,7 @@ object Destinations {
         DocumentFormat.WORD -> WORD
         DocumentFormat.POWERPOINT -> POWERPOINT
         DocumentFormat.PDF -> PDF
-        // EPUB editing is deferred to R.1; route to PDF viewer scope for now.
-        DocumentFormat.EPUB -> PDF
+        DocumentFormat.EPUB -> EPUB
     }
 }
 
@@ -62,6 +63,7 @@ fun KernNavHost(
         editorDestination(Destinations.WORD) { WordEditorScreen(filePath = it) }
         editorDestination(Destinations.POWERPOINT) { PptEditorScreen(filePath = it) }
         editorDestination(Destinations.PDF) { PdfEditorScreen(filePath = it) }
+        editorDestination(Destinations.EPUB) { EpubEditorScreen(filePath = it) }
     }
 }
 

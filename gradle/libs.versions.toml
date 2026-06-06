@@ -9,6 +9,7 @@ composeBom = "2024.10.01"
 navigationCompose = "2.8.3"
 poi = "5.3.0"
 opencsv = "5.9"
+jsoup = "1.18.1"
 # Test deps are wired here but live in the 0.1.0.1 (tests-only) release.
 junit = "4.13.2"
 androidxJunit = "1.2.1"
@@ -33,6 +34,8 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 poi = { group = "org.apache.poi", name = "poi", version.ref = "poi" }
 poi-ooxml = { group = "org.apache.poi", name = "poi-ooxml", version.ref = "poi" }
 opencsv = { group = "com.opencsv", name = "opencsv", version.ref = "opencsv" }
+# EPUB: ZIP container + XHTML chapters. Jsoup parses/edits XHTML text nodes.
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 
 # Tests
 junit = { group = "junit", name = "junit", version.ref = "junit" }
