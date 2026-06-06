@@ -34,6 +34,10 @@ changes_version.md
 # Internal / not-for-public-repo: planning docs, ADRs, release roadmap,
 # session handoffs, and the UI design handoff bundle. Kept local only.
 .internal/
+
+# Qyra checkout (separate repo / its own git remote). We work on it here and PR
+# from the fork; Kern must not track it.
+/qyra/
 # Claude working memory: stays on disk (auto-loaded each session) but is not
 # published, since it references the internal roadmap.
 CLAUDE.md

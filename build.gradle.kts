@@ -12,12 +12,18 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: 0.1.4.0 = Alpha, Major 1, Minor 4 (PowerPoint), initial of the minor.
-        versionCode = 5
-        versionName = "0.1.4.0"
+        // A.B.C.D versioning: 0.1.5.0 = Alpha, Major 1, Minor 5 (PDF), initial of the minor.
+        versionCode = 6
+        versionName = "0.1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        // PDF engine: Kern loads libkern_pdf.so (built from the qyra/kern-bridge
+        // crate via cargo-ndk, see src/pdf-bridge/README.md). Limit to the ABIs we build.
+        ndk {
+            abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -37,6 +43,10 @@ android {
         manifest.srcFile("AndroidManifest.xml")
         java.srcDirs("src")
         res.srcDirs("res")
+        // Native PDF engine. The .so files are produced by the cargo-ndk build of
+        // the qyra/kern-bridge crate (gitignored; see src/pdf-bridge/README.md),
+        // dropped here as jniLibs/<abi>/libkern_pdf.so.
+        jniLibs.srcDirs("jniLibs")
     }
     sourceSets["test"].java.srcDirs("tests")
     sourceSets["androidTest"].java.srcDirs("tests/instrumented")

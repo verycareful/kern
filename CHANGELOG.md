@@ -2,6 +2,22 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.5.0] - 2026-06-06 13:28 IST
+### Added
+- PDF viewer (Android framework `PdfRenderer`): open a PDF, scroll through pages, pinch-to-zoom, a page indicator, and export a copy. Viewing needs no native code.
+- PDF tools backed by a native bridge to Qyra's `lopdf` engine:
+  - Merge: append other PDFs to the open one and save the combined file
+  - Extract pages: save a 1-based page range as a new PDF
+- Native bridge `dev.kern.pdfbridge.QyraPdf` (JNI) over a new standalone `kern-bridge` crate in the Qyra fork (depends only on `lopdf` + `jni`; merge/split logic ported from Qyra's commands). When the engine library is absent, the tools degrade gracefully instead of crashing.
+- Note: only the `arm64-v8a` engine library is bundled so far (other ABIs build from the same crate); split is currently single-range to single-file (multi-file per-page split lands later).
+
+### Changed
+- Replaced the placeholder PDF bridge stub (`MuPdfBridge`) with the working `QyraPdf` bridge; the PDF route now opens the real viewer instead of a stub surface.
+- Gradle: native library loading via `jniLibs/` plus ABI filters (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
+
+### Results
+- Verified by manual and on-device testing over USB (arm64 device). No automated test suite in this release (suites remain batched, deferred from 0.1.4.0).
+
 ## [0.1.4.0] - 2026-06-05 19:24 IST
 ### Added
 - PowerPoint editor (.pptx via Apache POI): open, navigate slides, edit each slide's text boxes, save in place, and export a copy
