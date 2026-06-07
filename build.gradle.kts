@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.5 fixes #6: Add Row/Column inserts at the selection (CSV + Excel).
-        versionCode = 13
-        versionName = "0.1.7.5"
+        // 0.1.7.6 fixes #2: grid horizontal axis uses LazyRow (stop composing off-screen columns).
+        versionCode = 14
+        versionName = "0.1.7.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

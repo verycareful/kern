@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.6] - 2026-06-07 11:30 IST
+
+### Changed
+- Grid horizontal axis now uses `LazyRow` instead of a plain `Row` with `horizontalScroll`. Only the columns visible in the viewport are composed; off-screen columns are discarded and recycled as you scroll, matching the existing vertical behaviour (`LazyColumn`). The column header and each data row maintain their own `LazyListState` and stay in sync via a bidirectional coroutine effect (closes #2)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`); the laziness improvement is UI/perf behaviour, verified manually on device
+
 ## [0.1.7.5] - 2026-06-07 11:22 IST
 
 ### Fixed

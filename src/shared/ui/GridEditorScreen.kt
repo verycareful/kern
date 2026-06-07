@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -268,13 +271,11 @@ private fun Grid(
     currentSheet: Int = 0,
     modifier: Modifier = Modifier,
 ) {
-    val hScroll = rememberScrollState()
+    val hState = rememberLazyListState()
     val vScroll = rememberLazyListState()
-    // Reset both scroll offsets when the sheet changes so each sheet starts at the
-    // top-left instead of inheriting the previous sheet's position (issue #3). CSV
-    // has a single sheet (key 0), so this is a no-op there.
+    // Reset both scroll offsets when the sheet changes (issue #3).
     LaunchedEffect(currentSheet) {
-        hScroll.scrollTo(0)
+        hState.scrollToItem(0)
         vScroll.scrollToItem(0)
     }
     val columns = rows.firstOrNull()?.size ?: 0
@@ -288,30 +289,84 @@ private fun Grid(
     Column(modifier) {
         Row {
             Tile("", gutterW, headerH, headerFont, hue, selected = false)
-            Row(Modifier.horizontalScroll(hScroll)) {
-                repeat(columns) { c ->
+            LazyRow(state = hState, modifier = Modifier.weight(1f)) {
+                items(count = columns, key = { it }) { c ->
                     Tile(spreadsheetColumnLabel(c), cellW, headerH, headerFont, hue, selected = c == selectedCol)
                 }
             }
         }
         LazyColumn(state = vScroll, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(rows) { r, row ->
-                Row {
-                    Tile((r + 1).toString(), gutterW, cellH, gutterFont, hue, selected = r == selectedRow)
-                    Row(Modifier.horizontalScroll(hScroll)) {
-                        for (c in 0 until columns) {
-                            GridCell(
-                                value = row.getOrElse(c) { "" },
-                                width = cellW,
-                                height = cellH,
-                                fontSize = cellFont,
-                                selected = r == selectedRow && c == selectedCol,
-                                hue = hue,
-                                onClick = { onSelect(r, c) },
-                            )
-                        }
-                    }
-                }
+                GridDataRow(
+                    rowIndex = r,
+                    row = row,
+                    columns = columns,
+                    selectedRow = selectedRow,
+                    selectedCol = selectedCol,
+                    masterHState = hState,
+                    cellW = cellW,
+                    cellH = cellH,
+                    gutterW = gutterW,
+                    gutterFont = gutterFont,
+                    cellFont = cellFont,
+                    hue = hue,
+                    onSelect = onSelect,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One data row in the grid. Holds its own [LazyListState] for horizontal
+ * scrolling and keeps it in sync with [masterHState] (the column header):
+ * master to row when another row or the header scrolls; row to master when
+ * the user scrolls this row directly, so the header and siblings follow.
+ */
+@Composable
+private fun GridDataRow(
+    rowIndex: Int,
+    row: List<String>,
+    columns: Int,
+    selectedRow: Int,
+    selectedCol: Int,
+    masterHState: LazyListState,
+    cellW: Dp,
+    cellH: Dp,
+    gutterW: Dp,
+    gutterFont: TextUnit,
+    cellFont: TextUnit,
+    hue: Color,
+    onSelect: (Int, Int) -> Unit,
+) {
+    val localHState = rememberLazyListState()
+    // Master → this row: apply the header's position when a different row or the
+    // header drove the scroll (guard prevents re-applying our own programmatic sync).
+    LaunchedEffect(masterHState.firstVisibleItemIndex, masterHState.firstVisibleItemScrollOffset) {
+        if (!localHState.isScrollInProgress) {
+            localHState.scrollToItem(masterHState.firstVisibleItemIndex, masterHState.firstVisibleItemScrollOffset)
+        }
+    }
+    // This row → master: propagate user-initiated scroll up to the master so all
+    // other visible rows (and the header) follow.
+    LaunchedEffect(localHState.firstVisibleItemIndex, localHState.firstVisibleItemScrollOffset) {
+        if (localHState.isScrollInProgress) {
+            masterHState.scrollToItem(localHState.firstVisibleItemIndex, localHState.firstVisibleItemScrollOffset)
+        }
+    }
+    Row {
+        Tile((rowIndex + 1).toString(), gutterW, cellH, gutterFont, hue, selected = rowIndex == selectedRow)
+        LazyRow(state = localHState, modifier = Modifier.weight(1f)) {
+            items(count = columns, key = { it }) { c ->
+                GridCell(
+                    value = row.getOrElse(c) { "" },
+                    width = cellW,
+                    height = cellH,
+                    fontSize = cellFont,
+                    selected = rowIndex == selectedRow && c == selectedCol,
+                    hue = hue,
+                    onClick = { onSelect(rowIndex, c) },
+                )
             }
         }
     }
