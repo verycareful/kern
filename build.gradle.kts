@@ -13,9 +13,10 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.6 fixes #2: grid horizontal axis uses LazyRow (stop composing off-screen columns).
-        versionCode = 14
-        versionName = "0.1.7.6"
+        // 0.1.7.7 fixes #1: Excel merged cells render with true H+V spanning
+        // (SubcomposeLayout 2D grid replaces the LazyColumn+LazyRow approach).
+        versionCode = 15
+        versionName = "0.1.7.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

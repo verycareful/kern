@@ -16,13 +16,27 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import dev.kern.shared.CellMerge
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -48,6 +62,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,6 +121,7 @@ fun GridEditorScreen(
     sheetNames: List<String> = emptyList(),
     currentSheet: Int = 0,
     onSelectSheet: (Int) -> Unit = {},
+    mergedRegions: List<CellMerge> = emptyList(),
 ) {
     UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
@@ -167,7 +183,7 @@ fun GridEditorScreen(
                     if (sheetNames.size > 1) SheetBar(sheetNames, currentSheet, onSelectSheet, hue)
                     CellReferenceBar(rows.isNotEmpty(), selectedRow, selectedCol, selectedValue, hue, onEditSelected)
                     Box(Modifier.weight(1f).pinchZoom(zoom)) {
-                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, Modifier.fillMaxSize())
+                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, mergedRegions, Modifier.fillMaxSize())
                         if (zoom.scale != 1f) {
                             Box(
                                 modifier = Modifier
@@ -269,16 +285,16 @@ private fun Grid(
     onSelect: (Int, Int) -> Unit,
     scale: Float,
     currentSheet: Int = 0,
+    mergedRegions: List<CellMerge> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
-    val hState = rememberLazyListState()
-    val vScroll = rememberLazyListState()
-    // Reset both scroll offsets when the sheet changes (issue #3).
-    LaunchedEffect(currentSheet) {
-        hState.scrollToItem(0)
-        vScroll.scrollToItem(0)
-    }
-    val columns = rows.firstOrNull()?.size ?: 0
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    val flingSpec = remember { exponentialDecay<Float>() }
+
+    val numRows = rows.size
+    val columns = rows.firstOrNull()?.size ?: 1
+
     val cellW = CellWidth * scale
     val cellH = CellHeight * scale
     val gutterW = GutterWidth * scale
@@ -286,87 +302,177 @@ private fun Grid(
     val cellFont = (13 * scale).sp
     val headerFont = (12 * scale).sp
     val gutterFont = (11 * scale).sp
+
+    val cellWPx = remember(cellW, density) { with(density) { cellW.roundToPx() } }
+    val cellHPx = remember(cellH, density) { with(density) { cellH.roundToPx() } }
+    val gutterWPx = remember(gutterW, density) { with(density) { gutterW.roundToPx() } }
+
+    var hScrollPx by remember { mutableStateOf(0) }
+    var vScrollPx by remember { mutableStateOf(0) }
+
+    // Reset scroll when the sheet changes (issue #3).
+    LaunchedEffect(currentSheet) {
+        hScrollPx = 0
+        vScrollPx = 0
+    }
+
     Column(modifier) {
+        // Frozen column-header row
         Row {
             Tile("", gutterW, headerH, headerFont, hue, selected = false)
-            LazyRow(state = hState, modifier = Modifier.weight(1f)) {
-                items(count = columns, key = { it }) { c ->
-                    Tile(spreadsheetColumnLabel(c), cellW, headerH, headerFont, hue, selected = c == selectedCol)
+            BoxWithConstraints(Modifier.weight(1f).height(headerH).clipToBounds()) {
+                val vpW = constraints.maxWidth
+                val fc = (hScrollPx / cellWPx).coerceAtLeast(0)
+                val lc = ((hScrollPx + vpW) / cellWPx + 1).coerceAtMost(columns - 1)
+                for (c in fc..lc) {
+                    key(c) {
+                        Box(Modifier.offset { IntOffset(c * cellWPx - hScrollPx, 0) }) {
+                            Tile(spreadsheetColumnLabel(c), cellW, headerH, headerFont, hue, c == selectedCol)
+                        }
+                    }
                 }
             }
         }
-        LazyColumn(state = vScroll, modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(rows) { r, row ->
-                GridDataRow(
-                    rowIndex = r,
-                    row = row,
-                    columns = columns,
-                    selectedRow = selectedRow,
-                    selectedCol = selectedCol,
-                    masterHState = hState,
-                    cellW = cellW,
-                    cellH = cellH,
-                    gutterW = gutterW,
-                    gutterFont = gutterFont,
-                    cellFont = cellFont,
-                    hue = hue,
-                    onSelect = onSelect,
-                )
-            }
-        }
-    }
-}
+        // Body: frozen row-gutter + 2D virtual cell area
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val vpW = constraints.maxWidth - gutterWPx
+            val vpH = constraints.maxHeight
+            val maxHScroll = (cellWPx * columns - vpW).coerceAtLeast(0)
+            val maxVScroll = (cellHPx * numRows - vpH).coerceAtLeast(0)
+            Row(Modifier.fillMaxSize()) {
+                // Frozen row-number gutter
+                Box(Modifier.width(gutterW).fillMaxHeight().clipToBounds()) {
+                    val fr = (vScrollPx / cellHPx).coerceAtLeast(0)
+                    val lr = ((vScrollPx + vpH) / cellHPx + 1).coerceAtMost(numRows - 1)
+                    for (r in fr..lr) {
+                        key(r) {
+                            Box(Modifier.offset { IntOffset(0, r * cellHPx - vScrollPx) }) {
+                                Tile((r + 1).toString(), gutterW, cellH, gutterFont, hue, r == selectedRow)
+                            }
+                        }
+                    }
+                }
+                // 2D virtual cell body: SubcomposeLayout places only visible cells (and
+                // merged-region origins that overlap the viewport) at pixel coordinates.
+                // Both scroll axes are driven by detectDragGestures so a single finger
+                // drag moves H and V simultaneously, and fling runs per-axis via Animatable.
+                SubcomposeLayout(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clipToBounds()
+                        .pointerInput(maxHScroll, maxVScroll) {
+                            val velocityTracker = VelocityTracker()
+                            detectDragGestures(
+                                onDragStart = { velocityTracker.resetTracking() },
+                                onDragEnd = {
+                                    val v = velocityTracker.calculateVelocity()
+                                    coroutineScope.launch {
+                                        Animatable(hScrollPx.toFloat()).animateDecay(-v.x, flingSpec) {
+                                            hScrollPx = value.roundToInt().coerceIn(0, maxHScroll)
+                                        }
+                                    }
+                                    coroutineScope.launch {
+                                        Animatable(vScrollPx.toFloat()).animateDecay(-v.y, flingSpec) {
+                                            vScrollPx = value.roundToInt().coerceIn(0, maxVScroll)
+                                        }
+                                    }
+                                },
+                                onDrag = { change, delta ->
+                                    hScrollPx = (hScrollPx - delta.x.roundToInt()).coerceIn(0, maxHScroll)
+                                    vScrollPx = (vScrollPx - delta.y.roundToInt()).coerceIn(0, maxVScroll)
+                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                    change.consume()
+                                },
+                            )
+                        },
+                ) { constraints ->
+                    val vpWPx = constraints.maxWidth
+                    val vpHPx = constraints.maxHeight
 
-/**
- * One data row in the grid. Holds its own [LazyListState] for horizontal
- * scrolling and keeps it in sync with [masterHState] (the column header):
- * master to row when another row or the header scrolls; row to master when
- * the user scrolls this row directly, so the header and siblings follow.
- */
-@Composable
-private fun GridDataRow(
-    rowIndex: Int,
-    row: List<String>,
-    columns: Int,
-    selectedRow: Int,
-    selectedCol: Int,
-    masterHState: LazyListState,
-    cellW: Dp,
-    cellH: Dp,
-    gutterW: Dp,
-    gutterFont: TextUnit,
-    cellFont: TextUnit,
-    hue: Color,
-    onSelect: (Int, Int) -> Unit,
-) {
-    val localHState = rememberLazyListState()
-    // Master → this row: apply the header's position when a different row or the
-    // header drove the scroll (guard prevents re-applying our own programmatic sync).
-    LaunchedEffect(masterHState.firstVisibleItemIndex, masterHState.firstVisibleItemScrollOffset) {
-        if (!localHState.isScrollInProgress) {
-            localHState.scrollToItem(masterHState.firstVisibleItemIndex, masterHState.firstVisibleItemScrollOffset)
-        }
-    }
-    // This row → master: propagate user-initiated scroll up to the master so all
-    // other visible rows (and the header) follow.
-    LaunchedEffect(localHState.firstVisibleItemIndex, localHState.firstVisibleItemScrollOffset) {
-        if (localHState.isScrollInProgress) {
-            masterHState.scrollToItem(localHState.firstVisibleItemIndex, localHState.firstVisibleItemScrollOffset)
-        }
-    }
-    Row {
-        Tile((rowIndex + 1).toString(), gutterW, cellH, gutterFont, hue, selected = rowIndex == selectedRow)
-        LazyRow(state = localHState, modifier = Modifier.weight(1f)) {
-            items(count = columns, key = { it }) { c ->
-                GridCell(
-                    value = row.getOrElse(c) { "" },
-                    width = cellW,
-                    height = cellH,
-                    fontSize = cellFont,
-                    selected = rowIndex == selectedRow && c == selectedCol,
-                    hue = hue,
-                    onClick = { onSelect(rowIndex, c) },
-                )
+                    val fr = (vScrollPx / cellHPx).coerceAtLeast(0)
+                    val lr = ((vScrollPx + vpHPx) / cellHPx + 1).coerceAtMost(numRows - 1)
+                    val fc = (hScrollPx / cellWPx).coerceAtLeast(0)
+                    val lc = ((hScrollPx + vpWPx) / cellWPx + 1).coerceAtMost(columns - 1)
+
+                    val placements = mutableListOf<Pair<Placeable, IntOffset>>()
+                    val renderedMerges = mutableSetOf<Int>()
+
+                    // Subcompose every visible cell. Merge origins consume their full
+                    // (colSpan * cellW) x (rowSpan * cellH) size; non-origin cells within
+                    // a merge are skipped entirely - the origin already covers that area.
+                    for (r in fr..lr) {
+                        for (c in fc..lc) {
+                            val mi = mergedRegions.indexOfFirst { it.contains(r, c) }
+                            val merge = mergedRegions.getOrNull(mi)
+                            if (merge != null && !merge.isOrigin(r, c)) continue
+                            if (merge != null && mi in renderedMerges) continue
+                            if (merge != null) renderedMerges.add(mi)
+
+                            val oR = merge?.firstRow ?: r
+                            val oC = merge?.firstCol ?: c
+                            val spanW = (merge?.let { it.lastCol - it.firstCol + 1 } ?: 1) * cellWPx
+                            val spanH = (merge?.let { it.lastRow - it.firstRow + 1 } ?: 1) * cellHPx
+                            val xOff = oC * cellWPx - hScrollPx
+                            val yOff = oR * cellHPx - vScrollPx
+                            val isSelected = if (merge != null) {
+                                selectedRow in merge.firstRow..merge.lastRow &&
+                                    selectedCol in merge.firstCol..merge.lastCol
+                            } else {
+                                r == selectedRow && c == selectedCol
+                            }
+                            val m = subcompose("c_${oR}_${oC}") {
+                                GridCell(
+                                    value = rows.getOrNull(oR)?.getOrElse(oC) { "" } ?: "",
+                                    width = with(density) { spanW.toDp() },
+                                    height = with(density) { spanH.toDp() },
+                                    fontSize = cellFont,
+                                    selected = isSelected,
+                                    hue = hue,
+                                    onClick = { onSelect(oR, oC) },
+                                )
+                            }
+                            placements.add(
+                                m.first().measure(Constraints.fixed(spanW, spanH)) to IntOffset(xOff, yOff),
+                            )
+                        }
+                    }
+
+                    // A merged origin whose top-left is outside the visible row/col range
+                    // can still overlap the viewport. Subcompose it here so the visible
+                    // portion of the spanning cell is not blank.
+                    mergedRegions.forEachIndexed { mi, merge ->
+                        if (mi in renderedMerges) return@forEachIndexed
+                        val xM = merge.firstCol * cellWPx
+                        val yM = merge.firstRow * cellHPx
+                        val wM = (merge.lastCol - merge.firstCol + 1) * cellWPx
+                        val hM = (merge.lastRow - merge.firstRow + 1) * cellHPx
+                        if (xM >= hScrollPx + vpWPx || xM + wM <= hScrollPx) return@forEachIndexed
+                        if (yM >= vScrollPx + vpHPx || yM + hM <= vScrollPx) return@forEachIndexed
+                        val xOff = xM - hScrollPx
+                        val yOff = yM - vScrollPx
+                        val isSelected = selectedRow in merge.firstRow..merge.lastRow &&
+                            selectedCol in merge.firstCol..merge.lastCol
+                        val m = subcompose("c_${merge.firstRow}_${merge.firstCol}") {
+                            GridCell(
+                                value = rows.getOrNull(merge.firstRow)?.getOrElse(merge.firstCol) { "" } ?: "",
+                                width = with(density) { wM.toDp() },
+                                height = with(density) { hM.toDp() },
+                                fontSize = cellFont,
+                                selected = isSelected,
+                                hue = hue,
+                                onClick = { onSelect(merge.firstRow, merge.firstCol) },
+                            )
+                        }
+                        placements.add(
+                            m.first().measure(Constraints.fixed(wM, hM)) to IntOffset(xOff, yOff),
+                        )
+                    }
+
+                    layout(vpWPx, vpHPx) {
+                        placements.forEach { (placeable, offset) -> placeable.placeRelative(offset) }
+                    }
+                }
             }
         }
     }
@@ -392,7 +498,15 @@ private fun Tile(text: String, width: Dp, height: Dp, fontSize: TextUnit, hue: C
 }
 
 @Composable
-private fun GridCell(value: String, width: Dp, height: Dp, fontSize: TextUnit, selected: Boolean, hue: Color, onClick: () -> Unit) {
+private fun GridCell(
+    value: String,
+    width: Dp,
+    height: Dp,
+    fontSize: TextUnit,
+    selected: Boolean,
+    hue: Color,
+    onClick: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .size(width, height)

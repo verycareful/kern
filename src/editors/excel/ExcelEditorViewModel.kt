@@ -10,6 +10,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.kern.shared.CellMerge
 import dev.kern.shared.io.DocumentIo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -38,6 +39,11 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var currentSheet by mutableStateOf(0)
         private set
+
+    private var mergedRegions: List<List<CellMerge>> = emptyList()
+
+    /** Merged regions for the currently active sheet. */
+    val currentMergedRegions: List<CellMerge> get() = mergedRegions.getOrNull(currentSheet) ?: emptyList()
 
     private var uri: Uri? = null
     private var originalBytes: ByteArray? = null
@@ -74,6 +80,7 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
                 originalBytes = bytes
                 sheetGrids = parsed.sheets.map { grid -> grid.map { it.toMutableStateList() }.toMutableStateList() }
                 sheetNames = parsed.sheetNames
+                mergedRegions = parsed.mergedRegions
                 currentSheet = 0
                 selectedRow = 0
                 selectedCol = 0

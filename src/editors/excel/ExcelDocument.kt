@@ -1,5 +1,6 @@
 package dev.kern.editors.excel
 
+import dev.kern.shared.CellMerge
 import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayInputStream
@@ -16,8 +17,12 @@ import java.io.ByteArrayOutputStream
  */
 object ExcelDocument {
 
-    /** A parsed workbook: sheet names plus one display grid per sheet (same order). */
-    data class Parsed(val sheetNames: List<String>, val sheets: List<List<List<String>>>)
+    /** A parsed workbook: sheet names, one display grid per sheet, and merged regions per sheet. */
+    data class Parsed(
+        val sheetNames: List<String>,
+        val sheets: List<List<List<String>>>,
+        val mergedRegions: List<List<CellMerge>>,
+    )
 
     /**
      * A structural change to replay on the original workbook before applying cell
@@ -33,12 +38,14 @@ object ExcelDocument {
             val formatter = DataFormatter()
             val names = ArrayList<String>(wb.numberOfSheets)
             val grids = ArrayList<List<List<String>>>(wb.numberOfSheets)
+            val allMerges = ArrayList<List<CellMerge>>(wb.numberOfSheets)
             for (s in 0 until wb.numberOfSheets) {
                 val sheet = wb.getSheetAt(s)
                 names.add(sheet.sheetName)
                 val lastRow = sheet.lastRowNum
                 if (lastRow < 0) {
                     grids.add(listOf(listOf("")))
+                    allMerges.add(emptyList())
                     continue
                 }
                 var width = 1
@@ -52,9 +59,12 @@ object ExcelDocument {
                         (0 until width).map { c -> row?.getCell(c)?.let { formatter.formatCellValue(it) } ?: "" }
                     },
                 )
+                allMerges.add(sheet.mergedRegions.map { m ->
+                    CellMerge(m.firstRow, m.lastRow, m.firstColumn, m.lastColumn)
+                })
             }
-            if (names.isEmpty()) return Parsed(listOf("Sheet1"), listOf(listOf(listOf(""))))
-            return Parsed(names, grids)
+            if (names.isEmpty()) return Parsed(listOf("Sheet1"), listOf(listOf(listOf(""))), listOf(emptyList()))
+            return Parsed(names, grids, allMerges)
         }
     }
 

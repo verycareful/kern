@@ -38,5 +38,6 @@ fun ExcelEditorScreen(
         sheetNames = vm.sheetNames,
         currentSheet = vm.currentSheet,
         onSelectSheet = vm::selectSheet,
+        mergedRegions = vm.currentMergedRegions,
     )
 }

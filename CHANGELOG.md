@@ -2,6 +2,17 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.7] - 2026-06-07 21:42 IST
+
+### Fixed
+- Excel merged cells now render with true visual spanning for every merge shape. A merged region (horizontal, vertical, or cross) appears as a single cell whose size covers the full spanned area: `colSpan * cellWidth` wide and `rowSpan * cellHeight` tall. Non-origin positions inside a merge are not rendered at all (the origin cell covers them), and the spanning cell looks identical to a normal cell, just larger. Clicking anywhere inside it selects the merge origin. Previously every cell in a merged region appeared as a separate, indistinguishable cell (closes #1)
+
+### Changed
+- Grid body now renders through a single `SubcomposeLayout` that virtualises both axes together, replacing the `LazyColumn` + per-row `LazyRow` approach. Only cells whose pixel rectangles intersect the viewport are subcomposed; merged origins overlapping the viewport from outside are subcomposed too, so a partially-scrolled span is never blank. This architecture is what makes true 2D merge spanning expressible. Scroll is driven by `detectDragGestures` (both axes move on one finger drag) with per-axis fling via `Animatable.animateDecay`. The frozen column header and row gutter are offset-positioned against the same pixel scroll state
+
+### Results
+- 14 tests across 5 suites, all passed (0.987s, local JVM via Gradle `testDebugUnitTest`); merged-cell spanning and 2D scroll verified manually on device with a multi-region `.xlsx`
+
 ## [0.1.7.6] - 2026-06-07 11:30 IST
 
 ### Changed
