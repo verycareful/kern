@@ -12,9 +12,10 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: 0.1.7.0 = Alpha, Major 1, Minor 7 (file browser), initial of the minor.
-        versionCode = 8
-        versionName = "0.1.7.0"
+        // A.B.C.D versioning: the .1 patch slot is tests-only. 0.1.7.1 backfills the
+        // deferred unit tests for the document logic (CSV/Excel/Word/PPT/EPUB).
+        versionCode = 9
+        versionName = "0.1.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

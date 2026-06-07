@@ -2,6 +2,20 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.1] - 2026-06-06 23:16 IST
+Tests-only release; backfills the document-layer suites deferred since 0.1.4.0.
+
+### Tests
+- CSV: parse/serialize round-trip, ragged-row padding, quoting, column labels
+- Excel: multi-sheet read; edit-only save preserves untouched cells and sheets
+- Word: paragraph text + coarse style read; edit-only save
+- PowerPoint: slide text read; edit-only save
+- EPUB: spine/TOC/block parsing; edit-only save with `mimetype` stored first; DRM rejection
+- Generative fixtures (sample files built in-test via POI/OpenCSV/Jsoup/zip); no binary test files committed
+
+### Results
+- 14 tests across 5 suites, all passed (15s, local JVM via Gradle `testDebugUnitTest`).
+
 ## [0.1.7.0] - 2026-06-06 22:59 IST
 ### Added
 - File browser home screen: lists the documents in your Documents and Downloads folders (read in place, never copied)
