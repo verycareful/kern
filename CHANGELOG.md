@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.4] - 2026-06-07 11:10 IST
+
+### Fixed
+- Excel: switching sheets now starts at the top-left instead of inheriting the previous sheet's scroll position. Both the horizontal and vertical grid scroll offsets reset when the active sheet changes (closes #3)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`); the per-sheet scroll reset is UI behavior, verified manually on device.
+
 ## [0.1.7.3] - 2026-06-07 11:03 IST
 
 ### Fixed

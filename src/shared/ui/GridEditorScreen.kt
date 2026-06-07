@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -162,7 +164,7 @@ fun GridEditorScreen(
                     if (sheetNames.size > 1) SheetBar(sheetNames, currentSheet, onSelectSheet, hue)
                     CellReferenceBar(rows.isNotEmpty(), selectedRow, selectedCol, selectedValue, hue, onEditSelected)
                     Box(Modifier.weight(1f).pinchZoom(zoom)) {
-                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, Modifier.fillMaxSize())
+                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, Modifier.fillMaxSize())
                         if (zoom.scale != 1f) {
                             Box(
                                 modifier = Modifier
@@ -263,9 +265,18 @@ private fun Grid(
     hue: Color,
     onSelect: (Int, Int) -> Unit,
     scale: Float,
+    currentSheet: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val hScroll = rememberScrollState()
+    val vScroll = rememberLazyListState()
+    // Reset both scroll offsets when the sheet changes so each sheet starts at the
+    // top-left instead of inheriting the previous sheet's position (issue #3). CSV
+    // has a single sheet (key 0), so this is a no-op there.
+    LaunchedEffect(currentSheet) {
+        hScroll.scrollTo(0)
+        vScroll.scrollToItem(0)
+    }
     val columns = rows.firstOrNull()?.size ?: 0
     val cellW = CellWidth * scale
     val cellH = CellHeight * scale
@@ -283,7 +294,7 @@ private fun Grid(
                 }
             }
         }
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(state = vScroll, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(rows) { r, row ->
                 Row {
                     Tile((r + 1).toString(), gutterW, cellH, gutterFont, hue, selected = r == selectedRow)
