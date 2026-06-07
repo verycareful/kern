@@ -2,6 +2,17 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.3] - 2026-06-07 11:03 IST
+
+### Fixed
+- PDF merge/extract tools now work on the released APKs. CI cross-compiles the native bridge (`libkern_pdf.so`) and bundles it into the package, so `QyraPdf.available` is true instead of always false. Previously the `.so` was gitignored and never built in CI, leaving the PDF tools dead on shipped builds (closes #10)
+
+### Changed
+- CI: added a reusable `build-pdf-bridge` composite action (cargo-ndk cross-compile of the `kern-bridge` crate to `arm64-v8a`/`armeabi-v7a`/`x86_64`), run by both the release and Android CI workflows before the Gradle build
+
+### Results
+- 14 tests across 5 suites, all passed (unchanged from 0.1.7.2; this release touches CI only). Native bundling is verified by the GitHub Actions run on the next tag/build.
+
 ## [0.1.7.2] - 2026-06-07 10:56 IST
 
 ### Fixed

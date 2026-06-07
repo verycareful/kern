@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.2 fixes #4: confirm before discarding unsaved edits on back.
-        versionCode = 10
-        versionName = "0.1.7.2"
+        // 0.1.7.3 fixes #10: CI builds + bundles the native PDF bridge into the APK.
+        versionCode = 11
+        versionName = "0.1.7.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

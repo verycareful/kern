@@ -27,6 +27,10 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      # Produces jniLibs/<abi>/libkern_pdf.so so the released APK ships the PDF engine.
+      - name: Build PDF native bridge
+        uses: ./.github/actions/build-pdf-bridge
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 

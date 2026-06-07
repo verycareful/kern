@@ -34,6 +34,10 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      # Cross-compiles the native PDF bridge so the debug artifact has working PDF tools.
+      - name: Build PDF native bridge
+        uses: ./.github/actions/build-pdf-bridge
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 

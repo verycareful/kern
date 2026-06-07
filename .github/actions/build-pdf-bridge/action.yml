@@ -1,0 +1,56 @@
+name: Build PDF native bridge
+description: >
+  Cross-compiles the kern-bridge crate (pure lopdf + jni, no MuPDF) from the Qyra
+  fork into jniLibs/<abi>/libkern_pdf.so, so the packaged APK ships the native PDF
+  engine and QyraPdf.available is true. See src/pdf-bridge/README.md.
+
+inputs:
+  qyra-repo:
+    description: Qyra fork repository (owner/name) that holds kern-bridge.
+    default: verycareful/Qyra
+  qyra-ref:
+    description: Git ref (branch/tag/sha) of the fork to build from.
+    default: main
+  abis:
+    description: Space-separated cargo-ndk ABIs to build.
+    default: arm64-v8a armeabi-v7a x86_64
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust with Android targets
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+    - name: Install cargo-ndk
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-ndk
+
+    - name: Point cargo-ndk at the runner's Android NDK
+      shell: bash
+      run: echo "ANDROID_NDK_HOME=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}" >> "$GITHUB_ENV"
+
+    - name: Fetch kern-bridge from the Qyra fork (sparse)
+      shell: bash
+      run: |
+        git clone --depth 1 --branch "${{ inputs.qyra-ref }}" --sparse \
+          "https://github.com/${{ inputs.qyra-repo }}.git" qyra-fork
+        cd qyra-fork
+        git sparse-checkout set kern-bridge
+        test -f kern-bridge/Cargo.toml || { echo "kern-bridge not found in ${{ inputs.qyra-repo }}@${{ inputs.qyra-ref }}"; exit 1; }
+
+    - name: Build libkern_pdf.so for each ABI
+      shell: bash
+      run: |
+        targets=""
+        for abi in ${{ inputs.abis }}; do targets="$targets -t $abi"; done
+        cd qyra-fork/kern-bridge
+        cargo ndk $targets -o "$GITHUB_WORKSPACE/jniLibs" build --release
+
+    - name: Verify the libraries landed
+      shell: bash
+      run: |
+        test -f "$GITHUB_WORKSPACE/jniLibs/arm64-v8a/libkern_pdf.so"
+        ls -R "$GITHUB_WORKSPACE/jniLibs"
