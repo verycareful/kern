@@ -2,6 +2,17 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.5] - 2026-06-07 11:22 IST
+
+### Fixed
+- Add Row / Add Column now insert at the selection (a new row just below the selected row, a new column just to the right) instead of always appending to the end, in both the CSV and Excel editors (closes #6)
+
+### Changed
+- Excel: a mid-grid insert now shifts existing rows/columns structurally on save (POI `shiftRows`/`shiftColumns`) and re-keys pending edits, so formulas and formatting are preserved and saved cells stay aligned (rather than the edit-only save misaligning after an insert)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`); insert-at-selection and the Excel insert/edit/save/reopen cycle verified manually on device
+
 ## [0.1.7.4] - 2026-06-07 11:10 IST
 
 ### Fixed

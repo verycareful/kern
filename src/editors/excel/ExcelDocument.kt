@@ -19,6 +19,15 @@ object ExcelDocument {
     /** A parsed workbook: sheet names plus one display grid per sheet (same order). */
     data class Parsed(val sheetNames: List<String>, val sheets: List<List<List<String>>>)
 
+    /**
+     * A structural change to replay on the original workbook before applying cell
+     * edits, so an inserted row/column shifts existing content (preserving formulas
+     * and formatting) and the edit keys stay aligned with the displayed grid.
+     */
+    sealed interface StructuralOp { val sheet: Int }
+    data class InsertRow(override val sheet: Int, val at: Int) : StructuralOp
+    data class InsertColumn(override val sheet: Int, val at: Int) : StructuralOp
+
     fun read(bytes: ByteArray): Parsed {
         XSSFWorkbook(ByteArrayInputStream(bytes)).use { wb ->
             val formatter = DataFormatter()
@@ -54,8 +63,32 @@ object ExcelDocument {
      * col) back into the matching sheets, then returns the serialized bytes. Numeric
      * where the text parses as a number, else string. Cells/rows created on demand.
      */
-    fun applyEditsAndSerialize(originalBytes: ByteArray, edits: Map<Triple<Int, Int, Int>, String>): ByteArray {
+    fun applyEditsAndSerialize(
+        originalBytes: ByteArray,
+        edits: Map<Triple<Int, Int, Int>, String>,
+        structuralOps: List<StructuralOp> = emptyList(),
+    ): ByteArray {
         XSSFWorkbook(ByteArrayInputStream(originalBytes)).use { wb ->
+            // Replay inserts first so existing rows/columns shift down/right (POI moves
+            // their content + styles); the gap left behind is the inserted blank.
+            for (op in structuralOps) {
+                if (op.sheet < 0 || op.sheet >= wb.numberOfSheets) continue
+                val sheet = wb.getSheetAt(op.sheet)
+                when (op) {
+                    is InsertRow -> {
+                        val last = sheet.lastRowNum
+                        if (op.at in 0..last) sheet.shiftRows(op.at, last, 1)
+                    }
+                    is InsertColumn -> {
+                        var maxCol = -1
+                        for (r in 0..sheet.lastRowNum) {
+                            val row = sheet.getRow(r) ?: continue
+                            maxCol = maxOf(maxCol, row.lastCellNum - 1)
+                        }
+                        if (op.at in 0..maxCol) sheet.shiftColumns(op.at, maxCol, 1)
+                    }
+                }
+            }
             for ((key, value) in edits) {
                 val (s, r, c) = key
                 if (s < 0 || s >= wb.numberOfSheets) continue

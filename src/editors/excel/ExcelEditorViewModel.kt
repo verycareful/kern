@@ -43,6 +43,7 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
     private var originalBytes: ByteArray? = null
     private var sheetGrids: List<SnapshotStateList<SnapshotStateList<String>>> = emptyList()
     private val edits = mutableMapOf<Triple<Int, Int, Int>, String>()
+    private val structuralOps = mutableListOf<ExcelDocument.StructuralOp>()
     private var started = false
 
     /** Grid for the currently selected sheet. */
@@ -108,17 +109,52 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Inserts a blank row below the selection. The displayed grid, the edit keys
+     * (shifted down past the insert), and the recorded structural op all stay in
+     * lockstep so the edit-only save reproduces the insert on the original workbook.
+     */
     fun addRow() {
         val grid = sheetGrids.getOrNull(currentSheet) ?: return
-        grid.add(MutableList(columnCount.coerceAtLeast(1)) { "" }.toMutableStateList())
+        val at = (selectedRow + 1).coerceIn(0, grid.size)
+        grid.add(at, MutableList(columnCount.coerceAtLeast(1)) { "" }.toMutableStateList())
+        rekeyRowInsert(currentSheet, at)
+        structuralOps.add(ExcelDocument.InsertRow(currentSheet, at))
         dirty = true
     }
 
+    /** Inserts a blank column to the right of the selection (see [addRow]). */
     fun addColumn() {
         val grid = sheetGrids.getOrNull(currentSheet) ?: return
-        if (grid.isEmpty()) grid.add(mutableStateListOf(""))
-        grid.forEach { it.add("") }
+        if (grid.isEmpty()) {
+            grid.add(mutableStateListOf(""))
+            structuralOps.add(ExcelDocument.InsertColumn(currentSheet, 0))
+            dirty = true
+            return
+        }
+        val at = (selectedCol + 1).coerceIn(0, grid.first().size)
+        grid.forEach { row -> row.add(at.coerceIn(0, row.size), "") }
+        rekeyColInsert(currentSheet, at)
+        structuralOps.add(ExcelDocument.InsertColumn(currentSheet, at))
         dirty = true
+    }
+
+    /** Shifts edits at or below [at] in [sheet] down one row to match a row insert. */
+    private fun rekeyRowInsert(sheet: Int, at: Int) {
+        val remapped = edits.mapKeys { (k, _) ->
+            if (k.first == sheet && k.second >= at) Triple(k.first, k.second + 1, k.third) else k
+        }
+        edits.clear()
+        edits.putAll(remapped)
+    }
+
+    /** Shifts edits at or right of [at] in [sheet] one column over to match a column insert. */
+    private fun rekeyColInsert(sheet: Int, at: Int) {
+        val remapped = edits.mapKeys { (k, _) ->
+            if (k.first == sheet && k.third >= at) Triple(k.first, k.second, k.third + 1) else k
+        }
+        edits.clear()
+        edits.putAll(remapped)
     }
 
     fun save(onResult: (ok: Boolean, message: String?) -> Unit) {
@@ -135,9 +171,10 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<Application>()
         val bytes = originalBytes ?: run { onResult(false, "Nothing to save."); return }
         val snapshot = edits.toMap()
+        val ops = structuralOps.toList()
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { DocumentIo.writeBytes(ctx, target, ExcelDocument.applyEditsAndSerialize(bytes, snapshot)) }
+                runCatching { DocumentIo.writeBytes(ctx, target, ExcelDocument.applyEditsAndSerialize(bytes, snapshot, ops)) }
             }
             onResult(result.isSuccess, result.exceptionOrNull()?.message)
         }

@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.4 fixes #3: reset Excel horizontal scroll when switching sheets.
-        versionCode = 12
-        versionName = "0.1.7.4"
+        // 0.1.7.5 fixes #6: Add Row/Column inserts at the selection (CSV + Excel).
+        versionCode = 13
+        versionName = "0.1.7.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

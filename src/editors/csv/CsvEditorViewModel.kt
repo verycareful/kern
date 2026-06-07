@@ -89,14 +89,24 @@ class CsvEditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Inserts a blank row just below the selected row (appends if nothing useful is selected). */
     fun addRow() {
-        rows.add(MutableList(columnCount.coerceAtLeast(1)) { "" }.toMutableStateList())
+        val insertAt = (selectedRow + 1).coerceIn(0, rows.size)
+        rows.add(insertAt, MutableList(columnCount.coerceAtLeast(1)) { "" }.toMutableStateList())
         dirty = true
     }
 
+    /** Inserts a blank column just to the right of the selected column. */
     fun addColumn() {
-        if (rows.isEmpty()) rows.add(mutableStateListOf(""))
-        rows.forEach { it.add("") }
+        if (rows.isEmpty()) {
+            rows.add(mutableStateListOf(""))
+            dirty = true
+            return
+        }
+        rows.forEach { row ->
+            val insertAt = (selectedCol + 1).coerceIn(0, row.size)
+            row.add(insertAt, "")
+        }
         dirty = true
     }
 
