@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.2] - 2026-06-07 10:56 IST
+
+### Fixed
+- Editors no longer discard unsaved edits silently on back. While there are unsaved changes, both gesture/hardware back and the top-bar back arrow show a "Discard unsaved changes?" confirmation; "Stay" keeps editing, "Discard" leaves (CSV, Excel, Word, PowerPoint, EPUB) (closes #4)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`); the back-navigation guard is UI behavior, verified manually on device
+
 ## [0.1.7.1] - 2026-06-06 23:16 IST
 Tests-only release; backfills the document-layer suites deferred since 0.1.4.0.
 

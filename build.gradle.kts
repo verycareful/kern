@@ -12,10 +12,10 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        // A.B.C.D versioning: the .1 patch slot is tests-only. 0.1.7.1 backfills the
-        // deferred unit tests for the document logic (CSV/Excel/Word/PPT/EPUB).
-        versionCode = 9
-        versionName = "0.1.7.1"
+        // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
+        // 0.1.7.2 fixes #4: confirm before discarding unsaved edits on back.
+        versionCode = 10
+        versionName = "0.1.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

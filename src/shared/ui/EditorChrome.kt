@@ -55,6 +55,7 @@ fun EditorChrome(
     onExportToUri: (Uri, onResult: (Boolean, String?) -> Unit) -> Unit,
     content: @Composable (Modifier) -> Unit,
 ) {
+    UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher

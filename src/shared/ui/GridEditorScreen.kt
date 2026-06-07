@@ -102,6 +102,7 @@ fun GridEditorScreen(
     currentSheet: Int = 0,
     onSelectSheet: (Int) -> Unit = {},
 ) {
+    UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
