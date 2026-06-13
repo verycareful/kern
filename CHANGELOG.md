@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.11] - 2026-06-13 18:45 IST
+
+### Changed
+- Audited and updated minor/patch dependencies: `androidx.compose:compose-bom` to `2026.05.01` and `org.apache.poi` to `5.5.1` (closes #11)
+
+### Results
+- Build and tests pass with new library versions
+
 ## [0.1.7.10] - 2026-06-13 18:35 IST
 
 ### Changed

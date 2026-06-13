@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.10 fixes #8: refactor - Modifier.clickable -> native onClick where available
-        versionCode = 18
-        versionName = "0.1.7.10"
+        // 0.1.7.11 fixes #11: chore(deps) - dependency version audit (minor/patch only)
+        versionCode = 19
+        versionName = "0.1.7.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
