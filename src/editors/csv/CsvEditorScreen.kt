@@ -34,5 +34,11 @@ fun CsvEditorScreen(
         onExportToUri = vm::exportTo,
         onAddRow = vm::addRow,
         onAddColumn = vm::addColumn,
+        colWidths = vm.colWidths,
+        rowHeights = vm.rowHeights,
+        onResizeColumn = vm::resizeColumn,
+        onResizeRow = vm::resizeRow,
+        onAutoResizeColumn = vm::autoResizeColumn,
+        onAutoResizeRow = vm::autoResizeRow,
     )
 }

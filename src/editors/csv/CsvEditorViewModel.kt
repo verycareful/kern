@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.kern.shared.io.DocumentIo
@@ -39,6 +40,11 @@ class CsvEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private var uri: Uri? = null
     private var started = false
+
+    var colWidths by mutableStateOf<Map<Int, Float>>(emptyMap())
+        private set
+    var rowHeights by mutableStateOf<Map<Int, Float>>(emptyMap())
+        private set
 
     val columnCount: Int get() = rows.firstOrNull()?.size ?: 0
 
@@ -88,6 +94,33 @@ class CsvEditorViewModel(app: Application) : AndroidViewModel(app) {
             row[selectedCol] = value
             dirty = true
         }
+    }
+
+    fun resizeColumn(c: Int, dp: Float) {
+        colWidths = colWidths + (c to dp)
+    }
+
+    fun resizeRow(r: Int, dp: Float) {
+        rowHeights = rowHeights + (r to dp)
+    }
+
+    fun autoResizeColumn(c: Int) {
+        var maxLen = 4
+        for (row in rows) {
+            val cell = row.getOrNull(c) ?: continue
+            if (cell.length > maxLen) maxLen = cell.length
+        }
+        resizeColumn(c, (maxLen * 8f + 24f).coerceIn(40f, 600f))
+    }
+
+    fun autoResizeRow(r: Int) {
+        val row = rows.getOrNull(r) ?: return
+        var maxLines = 1
+        for (cell in row) {
+            val lines = cell.count { it == '\n' } + 1
+            if (lines > maxLines) maxLines = lines
+        }
+        resizeRow(r, (maxLines * 20f + 16f).coerceIn(24f, 400f))
     }
 
     /** Inserts a blank row just below the selected row (appends if nothing useful is selected). */

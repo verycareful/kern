@@ -2,6 +2,22 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.8.0] - 2026-06-13 19:27 IST
+
+### Added
+- Resizable grid columns and rows with explicit spawned drag handles (#12)
+- Double-tap auto-resize to fit column/row content lengths
+- Support for persistence of grid dimensions in Excel (.xlsx) using Apache POI
+
+### Changed
+- Replaced invisible drag boundaries with explicit trailing-edge drag handles for selected headers
+- Improved subcompose layout scrolling performance with binary search and offset mapping for dynamic dimensions
+- Used `Modifier.zIndex` and non-consuming pointer input for flawless handle rendering and zero-lag sensitivity
+
+### Results
+- UI drag handles render perfectly and respond consistently without interfering with 2D grid panning
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`)
+
 ## [0.1.7.11] - 2026-06-13 18:45 IST
 
 ### Changed

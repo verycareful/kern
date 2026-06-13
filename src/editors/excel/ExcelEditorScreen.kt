@@ -39,5 +39,11 @@ fun ExcelEditorScreen(
         currentSheet = vm.currentSheet,
         onSelectSheet = vm::selectSheet,
         mergedRegions = vm.currentMergedRegions,
+        colWidths = vm.colWidths,
+        rowHeights = vm.rowHeights,
+        onResizeColumn = vm::resizeColumn,
+        onResizeRow = vm::resizeRow,
+        onAutoResizeColumn = vm::autoResizeColumn,
+        onAutoResizeRow = vm::autoResizeRow,
     )
 }

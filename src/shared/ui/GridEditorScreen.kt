@@ -19,6 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
@@ -124,6 +133,12 @@ fun GridEditorScreen(
     currentSheet: Int = 0,
     onSelectSheet: (Int) -> Unit = {},
     mergedRegions: List<CellMerge> = emptyList(),
+    colWidths: Map<Int, Float> = emptyMap(),
+    rowHeights: Map<Int, Float> = emptyMap(),
+    onResizeColumn: (Int, Float) -> Unit = { _, _ -> },
+    onResizeRow: (Int, Float) -> Unit = { _, _ -> },
+    onAutoResizeColumn: (Int) -> Unit = {},
+    onAutoResizeRow: (Int) -> Unit = {},
 ) {
     UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
@@ -190,7 +205,7 @@ fun GridEditorScreen(
                     if (sheetNames.size > 1) SheetBar(sheetNames, currentSheet, onSelectSheet, hue)
                     CellReferenceBar(rows.isNotEmpty(), selectedRow, selectedCol, selectedValue, hue, onEditSelected)
                     Box(Modifier.weight(1f).pinchZoom(zoom)) {
-                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, mergedRegions, Modifier.fillMaxSize())
+                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, mergedRegions, colWidths, rowHeights, onResizeColumn, onResizeRow, onAutoResizeColumn, onAutoResizeRow, Modifier.fillMaxSize())
                         if (zoom.scale != 1f) {
                             Box(
                                 modifier = Modifier
@@ -302,6 +317,12 @@ private fun Grid(
     scale: Float,
     currentSheet: Int = 0,
     mergedRegions: List<CellMerge> = emptyList(),
+    colWidths: Map<Int, Float> = emptyMap(),
+    rowHeights: Map<Int, Float> = emptyMap(),
+    onResizeColumn: (Int, Float) -> Unit = { _, _ -> },
+    onResizeRow: (Int, Float) -> Unit = { _, _ -> },
+    onAutoResizeColumn: (Int) -> Unit = {},
+    onAutoResizeRow: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -319,12 +340,54 @@ private fun Grid(
     val headerFont = (12 * scale).sp
     val gutterFont = (11 * scale).sp
 
-    val cellWPx = remember(cellW, density) { with(density) { cellW.roundToPx() } }
-    val cellHPx = remember(cellH, density) { with(density) { cellH.roundToPx() } }
+    val defaultColWPx = remember(cellW, density) { with(density) { cellW.roundToPx() } }
+    val defaultRowHPx = remember(cellH, density) { with(density) { cellH.roundToPx() } }
     val gutterWPx = remember(gutterW, density) { with(density) { gutterW.roundToPx() } }
+
+    val customColWidthsPx = remember(colWidths, scale, density) {
+        colWidths.mapValues { with(density) { (it.value * scale).dp.roundToPx() } }
+    }
+    val customRowHeightsPx = remember(rowHeights, scale, density) {
+        rowHeights.mapValues { with(density) { (it.value * scale).dp.roundToPx() } }
+    }
+
+    val getColOffset = { c: Int ->
+        var off = c * defaultColWPx
+        customColWidthsPx.forEach { (idx, wPx) -> if (idx < c) off += (wPx - defaultColWPx) }
+        off
+    }
+    val getRowOffset = { r: Int ->
+        var off = r * defaultRowHPx
+        customRowHeightsPx.forEach { (idx, hPx) -> if (idx < r) off += (hPx - defaultRowHPx) }
+        off
+    }
+
+    val findFirstVisible = { scroll: Int, max: Int, offsetFn: (Int) -> Int ->
+        var low = 0
+        var high = max - 1
+        var result = 0
+        while (low <= high) {
+            val mid = (low + high) / 2
+            if (offsetFn(mid) <= scroll) {
+                result = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        result
+    }
 
     var hScrollPx by remember { mutableIntStateOf(0) }
     var vScrollPx by remember { mutableIntStateOf(0) }
+    var activeCol by remember { mutableStateOf<Int?>(null) }
+    var activeRow by remember { mutableStateOf<Int?>(null) }
+
+    val handleSelect = { r: Int, c: Int ->
+        activeCol = null
+        activeRow = null
+        onSelect(r, c)
+    }
 
     // Reset scroll when the sheet changes (issue #3).
     LaunchedEffect(currentSheet) {
@@ -338,12 +401,64 @@ private fun Grid(
             Tile("", gutterW, headerH, headerFont, hue, selected = false)
             BoxWithConstraints(Modifier.weight(1f).height(headerH).clipToBounds()) {
                 val vpW = constraints.maxWidth
-                val fc = (hScrollPx / cellWPx).coerceAtLeast(0)
-                val lc = ((hScrollPx + vpW) / cellWPx + 1).coerceAtMost(columns - 1)
+                val fc = findFirstVisible(hScrollPx, columns, getColOffset)
+                val lc = (findFirstVisible(hScrollPx + vpW, columns, getColOffset) + 1).coerceAtMost(columns - 1)
                 for (c in fc..lc) {
                     key(c) {
-                        Box(Modifier.offset { IntOffset(c * cellWPx - hScrollPx, 0) }) {
-                            Tile(spreadsheetColumnLabel(c), cellW, headerH, headerFont, hue, c == selectedCol)
+                        val cWPx = customColWidthsPx[c] ?: defaultColWPx
+                        val cW = if (c in customColWidthsPx) with(density) { cWPx.toDp() } else cellW
+                        val xOff = getColOffset(c) - hScrollPx
+                        Box(Modifier.offset { IntOffset(xOff, 0) }.clickable {
+                            activeCol = c
+                            activeRow = null
+                        }) {
+                            Tile(spreadsheetColumnLabel(c), cW, headerH, headerFont, hue, c == activeCol || (activeCol == null && c == selectedCol))
+                        }
+                        if (c == activeCol) {
+                            val dividerWidthPx = with(density) { 48.dp.roundToPx() }
+                            var currentWidthPx = cWPx.toFloat()
+                            var lastClickTime by remember { mutableStateOf(0L) }
+                            Box(
+                                Modifier
+                                    .zIndex(1f)
+                                    .offset { IntOffset(xOff + cWPx - dividerWidthPx / 2, 0) }
+                                    .size(48.dp, headerH)
+                                    .pointerInput(c, "tap") {
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val down = awaitFirstDown(requireUnconsumed = false)
+                                                val up = waitForUpOrCancellation()
+                                                if (up != null && (up.uptimeMillis - down.uptimeMillis) < 200) {
+                                                    if (up.uptimeMillis - lastClickTime < 300) {
+                                                        onAutoResizeColumn(c)
+                                                    }
+                                                    lastClickTime = up.uptimeMillis
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .pointerInput(c, "drag") {
+                                        detectDragGestures(
+                                            onDragStart = { currentWidthPx = cWPx.toFloat() },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                currentWidthPx += dragAmount.x
+                                                val newWidthDp = with(density) { currentWidthPx.toDp() }.value / scale
+                                                onResizeColumn(c, newWidthDp.coerceAtLeast(24f))
+                                            }
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(20.dp, 20.dp)
+                                        .background(hue, RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("<|>", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
@@ -353,17 +468,69 @@ private fun Grid(
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val vpW = constraints.maxWidth - gutterWPx
             val vpH = constraints.maxHeight
-            val maxHScroll = (cellWPx * columns - vpW).coerceAtLeast(0)
-            val maxVScroll = (cellHPx * numRows - vpH).coerceAtLeast(0)
+            val maxHScroll = (getColOffset(columns) - vpW).coerceAtLeast(0)
+            val maxVScroll = (getRowOffset(numRows) - vpH).coerceAtLeast(0)
             Row(Modifier.fillMaxSize()) {
                 // Frozen row-number gutter
                 Box(Modifier.width(gutterW).fillMaxHeight().clipToBounds()) {
-                    val fr = (vScrollPx / cellHPx).coerceAtLeast(0)
-                    val lr = ((vScrollPx + vpH) / cellHPx + 1).coerceAtMost(numRows - 1)
+                    val fr = findFirstVisible(vScrollPx, numRows, getRowOffset)
+                    val lr = (findFirstVisible(vScrollPx + vpH, numRows, getRowOffset) + 1).coerceAtMost(numRows - 1)
                     for (r in fr..lr) {
                         key(r) {
-                            Box(Modifier.offset { IntOffset(0, r * cellHPx - vScrollPx) }) {
-                                Tile((r + 1).toString(), gutterW, cellH, gutterFont, hue, r == selectedRow)
+                            val rHPx = customRowHeightsPx[r] ?: defaultRowHPx
+                            val rH = if (r in customRowHeightsPx) with(density) { rHPx.toDp() } else cellH
+                            val yOff = getRowOffset(r) - vScrollPx
+                            Box(Modifier.offset { IntOffset(0, yOff) }.clickable {
+                                activeRow = r
+                                activeCol = null
+                            }) {
+                                Tile((r + 1).toString(), gutterW, rH, gutterFont, hue, r == activeRow || (activeRow == null && r == selectedRow))
+                            }
+                            if (r == activeRow) {
+                                val dividerHeightPx = with(density) { 48.dp.roundToPx() }
+                                var currentHeightPx = rHPx.toFloat()
+                                var lastClickTime by remember { mutableStateOf(0L) }
+                                Box(
+                                    Modifier
+                                        .zIndex(1f)
+                                        .offset { IntOffset(0, yOff + rHPx - dividerHeightPx / 2) }
+                                        .size(gutterW, 48.dp)
+                                        .pointerInput(r, "tap") {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                                    val up = waitForUpOrCancellation()
+                                                    if (up != null && (up.uptimeMillis - down.uptimeMillis) < 200) {
+                                                        if (up.uptimeMillis - lastClickTime < 300) {
+                                                            onAutoResizeRow(r)
+                                                        }
+                                                        lastClickTime = up.uptimeMillis
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .pointerInput(r, "drag") {
+                                            detectDragGestures(
+                                                onDragStart = { currentHeightPx = rHPx.toFloat() },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    currentHeightPx += dragAmount.y
+                                                    val newHeightDp = with(density) { currentHeightPx.toDp() }.value / scale
+                                                    onResizeRow(r, newHeightDp.coerceAtLeast(24f))
+                                                }
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(20.dp, 20.dp)
+                                            .background(hue, RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("↕", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -406,10 +573,10 @@ private fun Grid(
                     val vpWPx = constraints.maxWidth
                     val vpHPx = constraints.maxHeight
 
-                    val fr = (vScrollPx / cellHPx).coerceAtLeast(0)
-                    val lr = ((vScrollPx + vpHPx) / cellHPx + 1).coerceAtMost(numRows - 1)
-                    val fc = (hScrollPx / cellWPx).coerceAtLeast(0)
-                    val lc = ((hScrollPx + vpWPx) / cellWPx + 1).coerceAtMost(columns - 1)
+                    val fr = findFirstVisible(vScrollPx, numRows, getRowOffset)
+                    val lr = (findFirstVisible(vScrollPx + vpHPx, numRows, getRowOffset) + 1).coerceAtMost(numRows - 1)
+                    val fc = findFirstVisible(hScrollPx, columns, getColOffset)
+                    val lc = (findFirstVisible(hScrollPx + vpWPx, columns, getColOffset) + 1).coerceAtMost(columns - 1)
 
                     val placements = mutableListOf<Pair<Placeable, IntOffset>>()
                     val renderedMerges = mutableSetOf<Int>()
@@ -427,10 +594,10 @@ private fun Grid(
 
                             val oR = merge?.firstRow ?: r
                             val oC = merge?.firstCol ?: c
-                            val spanW = (merge?.let { it.lastCol - it.firstCol + 1 } ?: 1) * cellWPx
-                            val spanH = (merge?.let { it.lastRow - it.firstRow + 1 } ?: 1) * cellHPx
-                            val xOff = oC * cellWPx - hScrollPx
-                            val yOff = oR * cellHPx - vScrollPx
+                            val spanW = (merge?.let { getColOffset(it.lastCol + 1) - getColOffset(it.firstCol) } ?: (getColOffset(oC + 1) - getColOffset(oC)))
+                            val spanH = (merge?.let { getRowOffset(it.lastRow + 1) - getRowOffset(it.firstRow) } ?: (getRowOffset(oR + 1) - getRowOffset(oR)))
+                            val xOff = getColOffset(oC) - hScrollPx
+                            val yOff = getRowOffset(oR) - vScrollPx
                             val isSelected = if (merge != null) {
                                 selectedRow in merge.firstRow..merge.lastRow &&
                                     selectedCol in merge.firstCol..merge.lastCol
@@ -445,7 +612,7 @@ private fun Grid(
                                     fontSize = cellFont,
                                     selected = isSelected,
                                     hue = hue,
-                                    onClick = { onSelect(oR, oC) },
+                                    onClick = { handleSelect(oR, oC) },
                                 )
                             }
                             placements.add(
@@ -459,10 +626,10 @@ private fun Grid(
                     // portion of the spanning cell is not blank.
                     mergedRegions.forEachIndexed { mi, merge ->
                         if (mi in renderedMerges) return@forEachIndexed
-                        val xM = merge.firstCol * cellWPx
-                        val yM = merge.firstRow * cellHPx
-                        val wM = (merge.lastCol - merge.firstCol + 1) * cellWPx
-                        val hM = (merge.lastRow - merge.firstRow + 1) * cellHPx
+                        val xM = getColOffset(merge.firstCol)
+                        val yM = getRowOffset(merge.firstRow)
+                        val wM = getColOffset(merge.lastCol + 1) - xM
+                        val hM = getRowOffset(merge.lastRow + 1) - yM
                         if (xM >= hScrollPx + vpWPx || xM + wM <= hScrollPx) return@forEachIndexed
                         if (yM >= vScrollPx + vpHPx || yM + hM <= vScrollPx) return@forEachIndexed
                         val xOff = xM - hScrollPx
@@ -477,7 +644,7 @@ private fun Grid(
                                 fontSize = cellFont,
                                 selected = isSelected,
                                 hue = hue,
-                                onClick = { onSelect(merge.firstRow, merge.firstCol) },
+                                onClick = { handleSelect(merge.firstRow, merge.firstCol) },
                             )
                         }
                         placements.add(

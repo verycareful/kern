@@ -41,6 +41,7 @@ changes_version.md
 # Claude working memory: stays on disk (auto-loaded each session) but is not
 # published, since it references the internal roadmap.
 CLAUDE.md
+.skill-extracted/
 
 # Environment
 .env

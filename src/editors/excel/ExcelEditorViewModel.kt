@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.kern.shared.CellMerge
@@ -49,9 +50,18 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
     private var uri: Uri? = null
     private var originalBytes: ByteArray? = null
     private var sheetGrids: List<SnapshotStateList<SnapshotStateList<String>>> = emptyList()
+    private var parsedColWidths: List<Map<Int, Float>> = emptyList()
+    private var parsedRowHeights: List<Map<Int, Float>> = emptyList()
     private val edits = mutableMapOf<Triple<Int, Int, Int>, String>()
     private val structuralOps = mutableListOf<ExcelDocument.StructuralOp>()
+    private val colWidthEdits = mutableMapOf<Pair<Int, Int>, Float>()
+    private val rowHeightEdits = mutableMapOf<Pair<Int, Int>, Float>()
     private var started = false
+    
+    var colWidths by mutableStateOf<Map<Int, Float>>(emptyMap())
+        private set
+    var rowHeights by mutableStateOf<Map<Int, Float>>(emptyMap())
+        private set
 
     /** Grid for the currently selected sheet. */
     val rows: List<List<String>> get() = sheetGrids.getOrNull(currentSheet) ?: emptyList()
@@ -82,7 +92,11 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
                 sheetGrids = parsed.sheets.map { grid -> grid.map { it.toMutableStateList() }.toMutableStateList() }
                 sheetNames = parsed.sheetNames
                 mergedRegions = parsed.mergedRegions
+                parsedColWidths = parsed.colWidths
+                parsedRowHeights = parsed.rowHeights
                 currentSheet = 0
+                colWidths = parsedColWidths.getOrNull(0) ?: emptyMap()
+                rowHeights = parsedRowHeights.getOrNull(0) ?: emptyMap()
                 selectedRow = 0
                 selectedCol = 0
                 loading = false
@@ -96,6 +110,8 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
     fun selectSheet(index: Int) {
         if (index in sheetNames.indices && index != currentSheet) {
             currentSheet = index
+            colWidths = (parsedColWidths.getOrNull(index) ?: emptyMap()) + colWidthEdits.filterKeys { it.first == index }.mapKeys { it.key.second }
+            rowHeights = (parsedRowHeights.getOrNull(index) ?: emptyMap()) + rowHeightEdits.filterKeys { it.first == index }.mapKeys { it.key.second }
             selectedRow = 0
             selectedCol = 0
         }
@@ -115,6 +131,39 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
             edits[Triple(currentSheet, selectedRow, selectedCol)] = value
             dirty = true
         }
+    }
+
+    fun resizeColumn(c: Int, dp: Float) {
+        colWidths = colWidths + (c to dp)
+        colWidthEdits[Pair(currentSheet, c)] = dp
+        dirty = true
+    }
+
+    fun resizeRow(r: Int, dp: Float) {
+        rowHeights = rowHeights + (r to dp)
+        rowHeightEdits[Pair(currentSheet, r)] = dp
+        dirty = true
+    }
+
+    fun autoResizeColumn(c: Int) {
+        val grid = sheetGrids.getOrNull(currentSheet) ?: return
+        var maxLen = 4
+        for (row in grid) {
+            val cell = row.getOrNull(c) ?: continue
+            if (cell.length > maxLen) maxLen = cell.length
+        }
+        resizeColumn(c, (maxLen * 8f + 24f).coerceIn(40f, 600f))
+    }
+
+    fun autoResizeRow(r: Int) {
+        val grid = sheetGrids.getOrNull(currentSheet) ?: return
+        val row = grid.getOrNull(r) ?: return
+        var maxLines = 1
+        for (cell in row) {
+            val lines = cell.count { it == '\n' } + 1
+            if (lines > maxLines) maxLines = lines
+        }
+        resizeRow(r, (maxLines * 20f + 16f).coerceIn(24f, 400f))
     }
 
     /**
@@ -180,9 +229,11 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
         val bytes = originalBytes ?: run { onResult(false, "Nothing to save."); return }
         val snapshot = edits.toMap()
         val ops = structuralOps.toList()
+        val cwSnapshot = colWidthEdits.toMap()
+        val rhSnapshot = rowHeightEdits.toMap()
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { DocumentIo.writeBytes(ctx, target, ExcelDocument.applyEditsAndSerialize(bytes, snapshot, ops)) }
+                runCatching { DocumentIo.writeBytes(ctx, target, ExcelDocument.applyEditsAndSerialize(bytes, snapshot, ops, cwSnapshot, rhSnapshot)) }
             }
             onResult(result.isSuccess, result.exceptionOrNull()?.message)
         }

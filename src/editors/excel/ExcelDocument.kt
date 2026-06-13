@@ -22,6 +22,8 @@ object ExcelDocument {
         val sheetNames: List<String>,
         val sheets: List<List<List<String>>>,
         val mergedRegions: List<List<CellMerge>>,
+        val colWidths: List<Map<Int, Float>> = emptyList(),
+        val rowHeights: List<Map<Int, Float>> = emptyList(),
     )
 
     /**
@@ -39,6 +41,8 @@ object ExcelDocument {
             val names = ArrayList<String>(wb.numberOfSheets)
             val grids = ArrayList<List<List<String>>>(wb.numberOfSheets)
             val allMerges = ArrayList<List<CellMerge>>(wb.numberOfSheets)
+            val allColWidths = ArrayList<Map<Int, Float>>(wb.numberOfSheets)
+            val allRowHeights = ArrayList<Map<Int, Float>>(wb.numberOfSheets)
             for (s in 0 until wb.numberOfSheets) {
                 val sheet = wb.getSheetAt(s)
                 names.add(sheet.sheetName)
@@ -46,12 +50,28 @@ object ExcelDocument {
                 if (lastRow < 0) {
                     grids.add(listOf(listOf("")))
                     allMerges.add(emptyList())
+                    allColWidths.add(emptyMap())
+                    allRowHeights.add(emptyMap())
                     continue
                 }
                 var width = 1
+                val rHeights = mutableMapOf<Int, Float>()
                 for (r in 0..lastRow) {
-                    val cells = sheet.getRow(r)?.lastCellNum?.toInt() ?: 0
-                    if (cells > width) width = cells
+                    val row = sheet.getRow(r)
+                    if (row != null) {
+                        val cells = row.lastCellNum.toInt()
+                        if (cells > width) width = cells
+                        if (row.height.toInt() != -1 && row.height.toInt() != sheet.defaultRowHeight.toInt()) {
+                            rHeights[r] = row.heightInPoints * 2.66f
+                        }
+                    }
+                }
+                val cWidths = mutableMapOf<Int, Float>()
+                for (c in 0 until width) {
+                    val w = sheet.getColumnWidth(c)
+                    if (w != sheet.defaultColumnWidth) {
+                        cWidths[c] = w * 0.05f
+                    }
                 }
                 grids.add(
                     (0..lastRow).map { r ->
@@ -62,9 +82,11 @@ object ExcelDocument {
                 allMerges.add(sheet.mergedRegions.map { m ->
                     CellMerge(m.firstRow, m.lastRow, m.firstColumn, m.lastColumn)
                 })
+                allColWidths.add(cWidths)
+                allRowHeights.add(rHeights)
             }
-            if (names.isEmpty()) return Parsed(listOf("Sheet1"), listOf(listOf(listOf(""))), listOf(emptyList()))
-            return Parsed(names, grids, allMerges)
+            if (names.isEmpty()) return Parsed(listOf("Sheet1"), listOf(listOf(listOf(""))), listOf(emptyList()), listOf(emptyMap()), listOf(emptyMap()))
+            return Parsed(names, grids, allMerges, allColWidths, allRowHeights)
         }
     }
 
@@ -77,6 +99,8 @@ object ExcelDocument {
         originalBytes: ByteArray,
         edits: Map<Triple<Int, Int, Int>, String>,
         structuralOps: List<StructuralOp> = emptyList(),
+        colWidths: Map<Pair<Int, Int>, Float> = emptyMap(),
+        rowHeights: Map<Pair<Int, Int>, Float> = emptyMap(),
     ): ByteArray {
         XSSFWorkbook(ByteArrayInputStream(originalBytes)).use { wb ->
             // Replay inserts first so existing rows/columns shift down/right (POI moves
@@ -107,6 +131,18 @@ object ExcelDocument {
                 val cell = row.getCell(c) ?: row.createCell(c)
                 val number = value.toDoubleOrNull()
                 if (number != null) cell.setCellValue(number) else cell.setCellValue(value)
+            }
+            for ((key, dp) in colWidths) {
+                val (s, c) = key
+                if (s < 0 || s >= wb.numberOfSheets) continue
+                wb.getSheetAt(s).setColumnWidth(c, (dp / 0.05f).toInt())
+            }
+            for ((key, dp) in rowHeights) {
+                val (s, r) = key
+                if (s < 0 || s >= wb.numberOfSheets) continue
+                val sheet = wb.getSheetAt(s)
+                val row = sheet.getRow(r) ?: sheet.createRow(r)
+                row.heightInPoints = dp / 2.66f
             }
             ByteArrayOutputStream().use { out ->
                 wb.write(out)
