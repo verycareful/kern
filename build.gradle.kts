@@ -13,10 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.7 fixes #1: Excel merged cells render with true H+V spanning
-        // (SubcomposeLayout 2D grid replaces the LazyColumn+LazyRow approach).
-        versionCode = 15
-        versionName = "0.1.7.7"
+        // 0.1.7.8 fixes #9: long/instructional Snackbars replaced with AlertDialog
+        versionCode = 16
+        versionName = "0.1.7.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

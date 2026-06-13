@@ -43,8 +43,11 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     /** A produced file in cache, waiting for the user to choose where to save it. */
     var pendingOutput by mutableStateOf<PendingOutput?>(null)
         private set
-    /** A transient message for the tools snackbar (error or info). */
+    /** A transient success message shown briefly as a snackbar. */
     var toolMessage by mutableStateOf<String?>(null)
+        private set
+    /** An error or instructional message to display in a dialog. */
+    var toolError by mutableStateOf<String?>(null)
         private set
 
     /** A cache file produced by a tool, plus a suggested save-as name. */
@@ -108,8 +111,8 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
      * path; the result is staged in [pendingOutput] for the caller to save out.
      */
     fun merge(extraUris: List<Uri>) {
-        val source = uri ?: run { toolMessage = "No open PDF to merge."; return }
-        if (extraUris.isEmpty()) { toolMessage = "Pick at least one more PDF to merge."; return }
+        val source = uri ?: run { toolError = "No open PDF to merge."; return }
+        if (extraUris.isEmpty()) { toolError = "Pick at least one more PDF to merge."; return }
         runTool {
             val dir = toolsCacheDir()
             val inputs = buildList {
@@ -126,9 +129,9 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
      * new file, staged in [pendingOutput].
      */
     fun extractPages(rangeSpec: String) {
-        val source = uri ?: run { toolMessage = "No open PDF."; return }
+        val source = uri ?: run { toolError = "No open PDF."; return }
         val spec = rangeSpec.trim()
-        if (spec.isEmpty()) { toolMessage = "Enter a page range, e.g. 1-3."; return }
+        if (spec.isEmpty()) { toolError = "Enter a page range, e.g. 1-3."; return }
         runTool {
             val dir = toolsCacheDir()
             val input = copyToCache(source, dir, "extract_src.pdf")
@@ -147,12 +150,14 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { DocumentIo.writeBytes(ctx, target, File(output.cachePath).readBytes()) }
             }
             pendingOutput = null
-            toolMessage = if (result.isSuccess) "Saved" else "Save failed: ${result.exceptionOrNull()?.message}"
+            if (result.isSuccess) toolMessage = "Saved"
+            else toolError = "Save failed: ${result.exceptionOrNull()?.message}"
         }
     }
 
     fun dismissPendingOutput() { pendingOutput = null }
     fun consumeToolMessage() { toolMessage = null }
+    fun consumeToolError() { toolError = null }
 
     /** Runs [block] off-main, mapping its [QyraPdf.Result] into [pendingOutput] / [toolMessage]. */
     private fun runTool(block: suspend () -> Pair<QyraPdf.Result, String>) {
@@ -165,10 +170,10 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
             when (result) {
                 is QyraPdf.Result.Success -> {
                     val first = result.outputPaths.firstOrNull()
-                    if (first == null) toolMessage = "The operation produced no output."
+                    if (first == null) toolError = "The operation produced no output."
                     else pendingOutput = PendingOutput(first, suggestedName)
                 }
-                is QyraPdf.Result.Failure -> toolMessage = result.message
+                is QyraPdf.Result.Failure -> toolError = result.message
             }
             toolBusy = false
         }

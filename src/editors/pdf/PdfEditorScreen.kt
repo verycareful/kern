@@ -154,7 +154,7 @@ private fun PdfPager(vm: PdfEditorViewModel, modifier: Modifier) {
  * Overlay for the PDF edit tools (merge / split) backed by the Qyra native bridge.
  * A tool produces a file in the app cache; this layer then prompts the user for a
  * SAF destination to save it out. Lives inside the pager [Box] so it can align its
- * FAB and snackbar.
+ * FAB, snackbar, and error dialog.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -192,6 +192,15 @@ private fun BoxScope.PdfToolsLayer(vm: PdfEditorViewModel) {
     if (vm.toolBusy) CircularProgressIndicator(Modifier.align(Alignment.Center))
 
     SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp))
+
+    vm.toolError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { vm.consumeToolError() },
+            title = { Text("PDF Tools") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { vm.consumeToolError() }) { Text("OK") } },
+        )
+    }
 
     if (sheetOpen) {
         ModalBottomSheet(onDismissRequest = { sheetOpen = false }) {

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -95,7 +96,7 @@ fun spreadsheetColumnLabel(index: Int): String {
  * row and row gutter, and add row/column actions. The host wires its ViewModel via
  * the callbacks; this composable owns no format-specific logic.
  *
- * @param onSave invoked with a result callback so this screen can report via snackbar.
+ * @param onSave invoked with a result callback (success via snackbar, error via dialog).
  * @param onExportToUri invoked with the chosen Save-as URI and a result callback.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -125,6 +126,7 @@ fun GridEditorScreen(
 ) {
     UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
+    var errorDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
     val scope = rememberCoroutineScope()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val zoom = rememberZoomState()
@@ -134,7 +136,8 @@ fun GridEditorScreen(
     ) { uri ->
         if (uri != null) {
             onExportToUri(uri) { ok, msg ->
-                scope.launch { snackbar.showSnackbar(if (ok) "Exported" else "Export failed: ${msg ?: "unknown error"}") }
+                if (ok) scope.launch { snackbar.showSnackbar("Exported") }
+                else errorDialog = "Export failed" to (msg ?: "Unknown error")
             }
         }
     }
@@ -161,7 +164,10 @@ fun GridEditorScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { onSave { ok, msg -> scope.launch { snackbar.showSnackbar(if (ok) "Saved" else "Save failed: ${msg ?: "read-only file, use Export"}") } } },
+                        onClick = { onSave { ok, msg ->
+                            if (ok) scope.launch { snackbar.showSnackbar("Saved") }
+                            else errorDialog = "Save failed" to (msg ?: "This file is read-only. Use Export to save a copy.")
+                        } },
                         enabled = dirty,
                     ) { Icon(Icons.Default.Save, contentDescription = "Save", tint = if (dirty) hue else MaterialTheme.colorScheme.onSurfaceVariant) }
                     IconButton(onClick = { exportLauncher.launch(exportFileName) }) {
@@ -210,6 +216,15 @@ fun GridEditorScreen(
                 }
             }
         }
+    }
+
+    errorDialog?.let { (title, body) ->
+        AlertDialog(
+            onDismissRequest = { errorDialog = null },
+            title = { Text(title) },
+            text = { Text(body) },
+            confirmButton = { TextButton(onClick = { errorDialog = null }) { Text("OK") } },
+        )
     }
 }
 

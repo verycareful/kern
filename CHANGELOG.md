@@ -2,6 +2,18 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.8] - 2026-06-13 18:10 IST
+
+### Fixed
+- Long or instructional messages (save/export errors, PDF tool errors) now display in a dismissible `AlertDialog` instead of a `Snackbar`. Short transient confirmations ("Saved", "Exported", "Deleted") remain as snackbars. Follows the Material 3 guideline: snackbars are for single-line confirmations only (closes #9)
+
+### Changed
+- `PdfEditorViewModel`: split `toolMessage` into `toolMessage` (success, snackbar) and `toolError` (errors/instructional, dialog); added `consumeToolError()`
+- `EditorChrome` and `GridEditorScreen`: save/export result callbacks now branch on success (snackbar) vs failure (AlertDialog with title + body)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`); UI-only change, save/export and PDF tool feedback channels verified manually on device
+
 ## [0.1.7.7] - 2026-06-07 21:42 IST
 
 ### Fixed
