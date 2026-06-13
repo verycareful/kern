@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.10] - 2026-06-13 18:35 IST
+
+### Changed
+- Refactored `Modifier.clickable` usages on `Surface` components (such as in `FileBrowserScreen`) to use the native `onClick` parameter, adhering to Material 3 standards (closes #8)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`); UI-only change, component interaction and ripples verified manually on device
+
 ## [0.1.7.9] - 2026-06-13 18:20 IST
 
 ### Changed

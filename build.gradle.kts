@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.7.9 fixes #7: perf: mutableStateOf<Int> -> mutableIntStateOf in ViewModels
-        versionCode = 17
-        versionName = "0.1.7.9"
+        // 0.1.7.10 fixes #8: refactor - Modifier.clickable -> native onClick where available
+        versionCode = 18
+        versionName = "0.1.7.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

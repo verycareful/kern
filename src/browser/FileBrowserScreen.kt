@@ -276,7 +276,8 @@ private fun SegmentedTabs(view: BrowserView, onSelect: (BrowserView) -> Unit) {
         for (v in BrowserView.entries) {
             val selected = v == view
             Surface(
-                modifier = Modifier.weight(1f).clickable { onSelect(v) },
+                onClick = { onSelect(v) },
+                modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
                 color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
                 shadowElevation = if (selected) 1.dp else 0.dp,
@@ -475,7 +476,8 @@ private fun FileRow(doc: ScannedDoc, onOpen: (ScannedDoc) -> Unit, onMore: (Scan
 private fun FileCard(doc: ScannedDoc, onOpen: (ScannedDoc) -> Unit, onMore: (ScannedDoc) -> Unit) {
     val style = doc.format.style()
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable { onOpen(doc) },
+                onClick = { onOpen(doc) },
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 1.dp,
