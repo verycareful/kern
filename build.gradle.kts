@@ -13,9 +13,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.8.0 adds resizable columns/rows
-        versionCode = 20
-        versionName = "0.1.8.0"
+        // 0.1.8.1 adds tests for Excel persistence
+        versionCode = 21
+        versionName = "0.1.8.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

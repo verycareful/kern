@@ -41,4 +41,20 @@ class ExcelDocumentTest {
         assertEquals("Ada", parsed.sheets[0][1][0]) // untouched neighbour
         assertEquals("X", parsed.sheets[1][0][0])   // untouched second sheet
     }
+    @Test
+    fun applyEdits_preservesColumnWidthsAndRowHeights() {
+        val edited = ExcelDocument.applyEditsAndSerialize(
+            sampleWorkbook(),
+            edits = emptyMap(),
+            colWidths = mapOf(Pair(0, 1) to 150f),
+            rowHeights = mapOf(Pair(0, 1) to 50f)
+        )
+        val parsed = ExcelDocument.read(edited)
+        
+        val newColWidth = parsed.colWidths[0][1] ?: 0f
+        val newRowHeight = parsed.rowHeights[0][1] ?: 0f
+        
+        assertEquals(150f, newColWidth, 1.0f)
+        assertEquals(50f, newRowHeight, 1.0f)
+    }
 }

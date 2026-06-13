@@ -2,6 +2,15 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.8.1] - 2026-06-13 19:38 IST
+
+### Tests
+- Added `applyEdits_preservesColumnWidthsAndRowHeights` to `ExcelDocumentTest.kt` to cover POI serialization and dimension calculation of custom row heights and column widths.
+- Verified removal of `.skill-extracted` from Git tracking tree.
+
+### Results
+- 15 tests across 5 suites, all passed (Android Studio)
+
 ## [0.1.8.0] - 2026-06-13 19:27 IST
 
 ### Added
