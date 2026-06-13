@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -28,7 +29,7 @@ class EpubEditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var error by mutableStateOf<String?>(null)
         private set
-    var currentChapter by mutableStateOf(0)
+    var currentChapter by mutableIntStateOf(0)
         private set
 
     private var chapters by mutableStateOf<List<EpubDocument.Chapter>>(emptyList())

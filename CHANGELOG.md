@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.7.9] - 2026-06-13 18:20 IST
+
+### Changed
+- Refactored `mutableStateOf<Int>` to `mutableIntStateOf` across all `ViewModel`s and `GridEditorScreen` to reduce boxing allocations and improve Compose performance (closes #7)
+
+### Results
+- 14 tests across 5 suites, all passed (local JVM via Gradle `testDebugUnitTest`)
+
 ## [0.1.7.8] - 2026-06-13 18:10 IST
 
 ### Fixed

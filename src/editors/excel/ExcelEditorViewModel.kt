@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -31,13 +32,13 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var error by mutableStateOf<String?>(null)
         private set
-    var selectedRow by mutableStateOf(0)
+    var selectedRow by mutableIntStateOf(0)
         private set
-    var selectedCol by mutableStateOf(0)
+    var selectedCol by mutableIntStateOf(0)
         private set
     var sheetNames by mutableStateOf<List<String>>(emptyList())
         private set
-    var currentSheet by mutableStateOf(0)
+    var currentSheet by mutableIntStateOf(0)
         private set
 
     private var mergedRegions: List<List<CellMerge>> = emptyList()

@@ -3,6 +3,7 @@ package dev.kern.editors.pptx
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -29,7 +30,7 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var error by mutableStateOf<String?>(null)
         private set
-    var currentSlide by mutableStateOf(0)
+    var currentSlide by mutableIntStateOf(0)
         private set
 
     private var uri: Uri? = null

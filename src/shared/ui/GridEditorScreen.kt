@@ -29,6 +29,7 @@ import dev.kern.shared.CellMerge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
@@ -322,8 +323,8 @@ private fun Grid(
     val cellHPx = remember(cellH, density) { with(density) { cellH.roundToPx() } }
     val gutterWPx = remember(gutterW, density) { with(density) { gutterW.roundToPx() } }
 
-    var hScrollPx by remember { mutableStateOf(0) }
-    var vScrollPx by remember { mutableStateOf(0) }
+    var hScrollPx by remember { mutableIntStateOf(0) }
+    var vScrollPx by remember { mutableIntStateOf(0) }
 
     // Reset scroll when the sheet changes (issue #3).
     LaunchedEffect(currentSheet) {
