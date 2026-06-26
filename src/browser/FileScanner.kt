@@ -38,12 +38,16 @@ object FileScanner {
                 PackageManager.PERMISSION_GRANTED
         }
 
-    /** Walks Documents + Downloads and returns every supported document found. */
-    fun scan(): List<ScannedDoc> {
-        val roots = listOfNotNull(
-            publicDir(Environment.DIRECTORY_DOCUMENTS),
-            publicDir(Environment.DIRECTORY_DOWNLOADS),
-        )
+    /**
+     * Walks the enabled roots (Documents and/or Downloads) and returns every
+     * supported document found. A folder whose scan toggle is off is skipped
+     * entirely, so its files never appear in, or open from, the app.
+     */
+    fun scan(scanDocuments: Boolean, scanDownloads: Boolean): List<ScannedDoc> {
+        val roots = buildList {
+            if (scanDocuments) publicDir(Environment.DIRECTORY_DOCUMENTS)?.let(::add)
+            if (scanDownloads) publicDir(Environment.DIRECTORY_DOWNLOADS)?.let(::add)
+        }
         val out = ArrayList<ScannedDoc>()
         val seen = HashSet<String>()
         for (root in roots) walk(root, out, seen, 0)

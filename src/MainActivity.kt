@@ -7,8 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import dev.kern.browser.IntentHandler
+import dev.kern.shared.settings.KernSettings
+import dev.kern.shared.settings.LocalKernSettings
 import dev.kern.shared.theme.KernTheme
 
 /**
@@ -23,16 +26,23 @@ class MainActivity : ComponentActivity() {
 
         // If launched via "Open with", jump straight to the right editor.
         val deepLink = IntentHandler.resolve(intent)
+        val settings = KernSettings.create(applicationContext)
 
         setContent {
-            KernTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
+            CompositionLocalProvider(LocalKernSettings provides settings) {
+                KernTheme(
+                    themeMode = settings.themeMode,
+                    accent = settings.accent,
+                    density = settings.density,
                 ) {
-                    KernNavHost(
-                        startDestination = deepLink?.route ?: Destinations.BROWSER,
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        KernNavHost(
+                            startDestination = deepLink?.route ?: Destinations.BROWSER,
+                        )
+                    }
                 }
             }
         }

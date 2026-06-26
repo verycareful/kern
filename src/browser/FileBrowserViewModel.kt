@@ -48,20 +48,34 @@ class FileBrowserViewModel(app: Application) : AndroidViewModel(app) {
     var sortAscending by mutableStateOf(false)
         private set
 
-    /** Re-checks permission and (if granted) rescans. Call on entry and on resume. */
-    fun refresh() {
+    // The scan-pref pair that the current `docs` reflect; null until the first
+    // scan (or after access is lost). Lets refresh skip redundant rescans, e.g.
+    // when returning to the browser from an editor.
+    private var loadedKey: Pair<Boolean, Boolean>? = null
+
+    /**
+     * Re-checks permission and rescans the enabled folders only when needed: the
+     * first load, a change to the scan toggles, or [force] (e.g. just after a
+     * permission grant). Returning from an editor with unchanged prefs is a no-op,
+     * so the list is not reloaded.
+     */
+    fun refresh(scanDocuments: Boolean, scanDownloads: Boolean, force: Boolean = false) {
         val ctx = getApplication<Application>()
         hasAccess = FileScanner.hasAccess(ctx)
         pins = store.pins()
         recents = store.recents()
         if (!hasAccess) {
             docs = emptyList()
+            loadedKey = null
             return
         }
+        val key = scanDocuments to scanDownloads
+        if (!force && loadedKey == key) return
+        loadedKey = key
         loading = true
         viewModelScope.launch {
             val scanned = withContext(Dispatchers.IO) {
-                runCatching { FileScanner.scan() }.getOrDefault(emptyList())
+                runCatching { FileScanner.scan(scanDocuments, scanDownloads) }.getOrDefault(emptyList())
             }
             docs = scanned
             loading = false

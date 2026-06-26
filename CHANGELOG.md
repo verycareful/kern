@@ -2,6 +2,39 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.9.0] - 2026-06-26 18:55 IST
+
+### Added
+- **Design system**: full custom token layer (`KernColorScheme`, `KernTheme`, `KernType`, `KernRadius`, `Density`) over Material 3, with light/dark neutrals, 12 user-selectable accent colours, per-format identity hues, and a locked Soft 6dp radius set
+- **Typography**: four bundled font families (Outfit for UI, Quicksand for the wordmark, IBM Plex Mono for metadata, Sora for EPUB reading) shipped as `res/font/*.ttf` with SIL OFL licenses
+- **Brand assets**: theme-aware chevron mark and wordmark lockup PNGs (`res/drawable-nodpi/`)
+- **Shared UI component library** (`KernComponents.kt`): `KernIconButton`, `KernSegmented`, `FileBadge`, `OnDevicePill`, `SectionLabel`, `KernDivider`, `KernToggle`, `KernTopBar`, `KernBottomSheet`, `SheetActionRow`, `EditorToolbar`, `ToolbarButton`, `ToolbarSeparator`
+- **Semantic icon set** (`KernIcons.kt`): Material Outlined mappings plus a custom GitHub vector
+- **Settings screen** (`src/settings/`): header, centered brand lockup, accent-soft privacy hero, and grouped surface cards for Appearance (Theme + Density), Accent (12-swatch picker), Files & storage (scan toggles), Privacy & permissions (locked network/analytics, live storage-access status), and About (version, license, source code, PDF engine)
+- **Settings persistence** (`KernSettings.kt`): observable SharedPreferences-backed store for theme mode, accent, density, scan-documents, and scan-downloads
+- **License viewer**: bundled AGPL-3.0 text (`res/raw/license.txt`) displayed in a full-screen scrollable dialog from the About section
+- **About links**: Source code row opens the Kern GitHub repo; PDF engine row opens the Qyra GitHub repo via external intents (no network permission needed)
+
+### Changed
+- Reskinned every screen to the new design system: file browser (header, tabs, search, pill chips, list rows, grid cards, sort/actions sheets, empty/permission states), CSV editor, Excel editor (cell ref bar, header tiles, sheet tabs), Word editor (paper page, formatting toolbar), EPUB editor (Sora reading body, chapter nav, TOC sheet), PowerPoint editor (16:9 canvas, thumbnail rail, slide toolbar), PDF editor (page/zoom pills, tools bottom sheet)
+- `EditorChrome`: migrated to `KernTopBar` + tokens; added toolbar and extra-actions slots
+- `GridEditorScreen`: sunken ref pill, accent header selection, format-hue header tints, bottom `EditorToolbar`, zoom badge
+- `FileBrowserScreen`: full reskin with `BrandMark`, `OnDevicePill`, `KernSegmented` tabs, and format-hue integration
+- `KernTopBar` now applies `statusBarsPadding()` and `EditorToolbar` applies `navigationBarsPadding()`, fixing the top-bar/status-bar clash across all editors and the settings screen
+- `Theme.kt`: rewrote `KernTheme` composable to resolve tokens, project onto Material 3 `ColorScheme` (legacy call sites keep working), and set status-bar appearance
+- Navigation: added `Destinations.SETTINGS` route wired from the browser's settings cog
+
+### Fixed
+- **Scan toggles are now functional**: `FileScanner` skips a folder whose toggle is off, so its files no longer appear or open in the app
+- **Browser no longer rescans on every return**: scans once on first load, on a toggle change, or after a permission grant; returning from a file shows the cached list
+- **Storage access status is live**: the Privacy & permissions row reflects the real permission state and lets you tap to grant when missing (previously hardcoded "GRANTED")
+- **Status-bar clash**: settings screen, editor top bars, and file viewers now respect system insets
+- **Navigation-bar clash**: editor bottom toolbars apply nav-bar padding
+
+### Results
+- 15 tests across 5 suites, all passed (Android Studio)
+- Build verified in Development Phone using USB debugging; all changes are UI/design, no new automated tests in this release (tests-only 0.1.9.1 is due next)
+
 ## [0.1.8.1] - 2026-06-13 19:38 IST
 
 ### Tests

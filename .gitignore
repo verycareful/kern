@@ -34,6 +34,10 @@ changes_version.md
 # Internal / not-for-public-repo: planning docs, ADRs, release roadmap,
 # session handoffs, and the UI design handoff bundle. Kept local only.
 .internal/
+# UI design handoff archive dropped at repo root (extracted into .internal/design/).
+/kern.zip
+# Font source archive dropped at repo root (static .ttf extracted into res/font/).
+/IBM_Plex_Mono,Outfit,Quicksand,Sora.zip
 
 # Qyra checkout (separate repo / its own git remote). We work on it here and PR
 # from the fork; Kern must not track it.

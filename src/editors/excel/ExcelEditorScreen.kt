@@ -2,12 +2,11 @@ package dev.kern.editors.excel
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.kern.shared.DocumentFormat
+import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.ui.GridEditorScreen
 
-// Excel format identity hue (design handoff).
-private val ExcelHue = Color(0xFF1F8454)
 private const val XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @Composable
@@ -22,7 +21,7 @@ fun ExcelEditorScreen(
         dirty = vm.dirty,
         loading = vm.loading,
         error = vm.error,
-        hue = ExcelHue,
+        hue = KernTheme.formatColor(DocumentFormat.EXCEL),
         rows = vm.rows,
         selectedRow = vm.selectedRow,
         selectedCol = vm.selectedCol,

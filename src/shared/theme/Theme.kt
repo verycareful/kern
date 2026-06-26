@@ -1,60 +1,122 @@
 package dev.kern.shared.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
-
-private val LightColors = lightColorScheme(
-    primary = KernBlue,
-    onPrimary = KernSurfaceLight,
-    secondary = KernAccent,
-    background = KernSurfaceLight,
-    onBackground = KernOnSurfaceLight,
-    surface = KernSurfaceLight,
-    onSurface = KernOnSurfaceLight,
-)
-
-private val DarkColors = darkColorScheme(
-    primary = KernBlueLight,
-    onPrimary = KernBlueDark,
-    secondary = KernAccentDark,
-    background = KernSurfaceDark,
-    onBackground = KernOnSurfaceDark,
-    surface = KernSurfaceDark,
-    onSurface = KernOnSurfaceDark,
-)
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 /**
  * Root theme for every Kern screen.
  *
- * @param dynamicColor pull the palette from the system wallpaper (Android 12+).
- *        Off by default so Kern keeps a consistent brand identity.
+ * Resolves the Kern token set ([KernColorScheme]) for the active theme and
+ * accent, exposes it through [LocalKernColors] / [LocalKernDensity] (read via
+ * [KernTheme]), and additionally projects the tokens onto a Material 3
+ * [androidx.compose.material3.ColorScheme] so stock Material components and any
+ * not-yet-migrated screens pick up the palette automatically.
+ *
+ * Kern uses a fixed brand palette with a user-selectable accent. There is no
+ * wallpaper-based dynamic colour: identity stays consistent on every device.
+ *
+ * @param themeMode Light, Dark, or Auto (follows the system).
+ * @param accent user-selected accent driving interactive chrome.
+ * @param density row/tile density (Cozy default).
  */
 @Composable
 fun KernTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
+    themeMode: ThemeMode = ThemeMode.AUTO,
+    accent: AccentColor = AccentColor.Default,
+    density: Density = Density.Default,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColors
-        else -> LightColors
+    val dark = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.AUTO -> isSystemInDarkTheme()
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = KernTypography,
-        content = content,
+    val kernColors = remember(dark, accent) {
+        if (dark) darkKernColors(accent) else lightKernColors(accent)
+    }
+    val materialScheme = remember(kernColors) { kernColors.toMaterialScheme() }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
+
+    CompositionLocalProvider(
+        LocalKernColors provides kernColors,
+        LocalKernDensity provides density,
+    ) {
+        MaterialTheme(
+            colorScheme = materialScheme,
+            typography = KernTypography,
+            content = content,
+        )
+    }
+}
+
+/**
+ * Project Kern tokens onto a Material 3 scheme. This keeps `MaterialTheme.*`
+ * call sites (and stock components like Snackbar, AlertDialog) on-palette.
+ */
+private fun KernColorScheme.toMaterialScheme() = if (dark) {
+    darkColorScheme(
+        primary = accent,
+        onPrimary = accentOn,
+        primaryContainer = accentSoft,
+        onPrimaryContainer = accent,
+        secondary = accent,
+        onSecondary = accentOn,
+        background = bg,
+        onBackground = text,
+        surface = surface,
+        onSurface = text,
+        surfaceVariant = sunken,
+        onSurfaceVariant = textMid,
+        surfaceContainer = surface,
+        surfaceContainerHigh = raised,
+        surfaceContainerHighest = raised,
+        outline = border,
+        outlineVariant = borderSoft,
+        error = danger,
+        onError = accentOn,
+        scrim = scrim,
+    )
+} else {
+    lightColorScheme(
+        primary = accent,
+        onPrimary = accentOn,
+        primaryContainer = accentSoft,
+        onPrimaryContainer = accent,
+        secondary = accent,
+        onSecondary = accentOn,
+        background = bg,
+        onBackground = text,
+        surface = surface,
+        onSurface = text,
+        surfaceVariant = sunken,
+        onSurfaceVariant = textMid,
+        surfaceContainer = surface,
+        surfaceContainerHigh = sunken,
+        surfaceContainerHighest = sunken,
+        outline = border,
+        outlineVariant = borderSoft,
+        error = danger,
+        onError = accentOn,
+        scrim = scrim,
     )
 }

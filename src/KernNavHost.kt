@@ -14,6 +14,7 @@ import dev.kern.editors.excel.ExcelEditorScreen
 import dev.kern.editors.pdf.PdfEditorScreen
 import dev.kern.editors.pptx.PptEditorScreen
 import dev.kern.editors.word.WordEditorScreen
+import dev.kern.settings.SettingsScreen
 import dev.kern.shared.DocumentFormat
 
 /**
@@ -24,6 +25,7 @@ import dev.kern.shared.DocumentFormat
  */
 object Destinations {
     const val BROWSER = "browser"
+    const val SETTINGS = "settings"
     const val ARG_FILE_PATH = "filePath"
 
     const val CSV = "csv"
@@ -55,7 +57,12 @@ fun KernNavHost(
                 onOpenDocument = { format, filePath ->
                     navController.navigate("${Destinations.routeFor(format)}/$filePath")
                 },
+                onOpenSettings = { navController.navigate(Destinations.SETTINGS) },
             )
+        }
+
+        composable(Destinations.SETTINGS) {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
 
         editorDestination(Destinations.CSV) { CsvEditorScreen(filePath = it) }

@@ -2,12 +2,10 @@ package dev.kern.editors.csv
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.kern.shared.DocumentFormat
+import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.ui.GridEditorScreen
-
-// CSV format identity hue (design handoff). The full design system arrives in the polish pass.
-private val CsvHue = Color(0xFF0E8E9A)
 
 @Composable
 fun CsvEditorScreen(
@@ -21,7 +19,7 @@ fun CsvEditorScreen(
         dirty = vm.dirty,
         loading = vm.loading,
         error = vm.error,
-        hue = CsvHue,
+        hue = KernTheme.formatColor(DocumentFormat.CSV),
         rows = vm.rows,
         selectedRow = vm.selectedRow,
         selectedCol = vm.selectedCol,

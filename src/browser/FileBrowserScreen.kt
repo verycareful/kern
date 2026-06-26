@@ -8,15 +8,18 @@ import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,37 +31,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,12 +50,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,8 +66,22 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kern.shared.DocumentFormat
 import dev.kern.shared.io.DocumentIo
-import dev.kern.shared.style
-import dev.kern.shared.theme.KernAccent
+import dev.kern.shared.theme.KernRadius
+import dev.kern.shared.theme.KernTheme
+import dev.kern.shared.theme.KernType
+import dev.kern.shared.theme.QuicksandFamily
+import dev.kern.shared.theme.monogram
+import dev.kern.shared.ui.BrandMark
+import dev.kern.shared.ui.FileBadge
+import dev.kern.shared.ui.KernBottomSheet
+import dev.kern.shared.ui.KernDivider
+import dev.kern.shared.ui.KernIconButton
+import dev.kern.shared.ui.KernIcons
+import dev.kern.shared.ui.KernSegmented
+import dev.kern.shared.ui.OnDevicePill
+import dev.kern.shared.ui.SectionLabel
+import dev.kern.shared.ui.SegmentItem
+import dev.kern.shared.ui.SheetActionRow
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.roundToInt
@@ -96,15 +92,18 @@ import kotlin.math.roundToInt
  * and per-file actions. Falls back to the system picker for files elsewhere.
  *
  * @param onOpenDocument invoked with the resolved format and an encoded URI string.
+ * @param onOpenSettings opens the Settings screen (from the header cog).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileBrowserScreen(
     onOpenDocument: (format: DocumentFormat, filePath: String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
     vm: FileBrowserViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val settings = dev.kern.shared.settings.LocalKernSettings.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -113,12 +112,21 @@ fun FileBrowserScreen(
     var deleteDoc by remember { mutableStateOf<ScannedDoc?>(null) }
     var sortOpen by remember { mutableStateOf(false) }
 
-    // Re-check permission + rescan whenever the screen resumes (covers returning
-    // from the system "all files access" settings page).
+    // Scan on first load and whenever the scan toggles change. Returning from an
+    // editor re-runs this with the same prefs, which the ViewModel treats as a
+    // no-op (no rescan), so the list is preserved instead of reloading.
+    androidx.compose.runtime.LaunchedEffect(settings.scanDocuments, settings.scanDownloads) {
+        vm.refresh(settings.scanDocuments, settings.scanDownloads)
+    }
+
+    // Catch a permission grant on resume (covers returning from the system
+    // "all files access" page); a no-op once access is already held.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) vm.refresh()
+            if (event == Lifecycle.Event.ON_RESUME && !vm.hasAccess) {
+                vm.refresh(settings.scanDocuments, settings.scanDownloads)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -126,10 +134,10 @@ fun FileBrowserScreen(
 
     val manageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { vm.refresh() }
+    ) { vm.refresh(settings.scanDocuments, settings.scanDownloads, force = true) }
     val readLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { vm.refresh() }
+    ) { vm.refresh(settings.scanDocuments, settings.scanDownloads, force = true) }
 
     fun requestAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -166,27 +174,38 @@ fun FileBrowserScreen(
 
     Scaffold(
         modifier = modifier,
+        containerColor = KernTheme.colors.bg,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { pickLauncher.launch(arrayOf("*/*")) },
-                icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+                icon = { Icon(KernIcons.Plus, contentDescription = null) },
                 text = { Text("Open file") },
+                containerColor = KernTheme.colors.accent,
+                contentColor = KernTheme.colors.accentOn,
+                shape = RoundedCornerShape(KernRadius.fab),
             )
         },
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            BrowserHeader(layoutIsList = vm.layout == BrowserLayout.LIST, onToggleLayout = vm::toggleLayout)
+            BrowserHeader(
+                layoutIsList = vm.layout == BrowserLayout.LIST,
+                onToggleLayout = vm::toggleLayout,
+                onOpenSettings = onOpenSettings,
+            )
             if (!vm.hasAccess) {
                 PermissionGate(onGrant = ::requestAccess, onPickFile = { pickLauncher.launch(arrayOf("*/*")) })
             } else {
-                SegmentedTabs(vm.view, vm::selectView)
-                SearchBar(vm.query, vm::updateQuery)
-                if (vm.view == BrowserView.ALL) FilterChips(vm.filter, vm::selectFilter)
+                BrowserTabs(vm.view, vm::selectView)
+                SearchField(vm.query, vm::updateQuery)
+                if (vm.view == BrowserView.ALL) FilterChipsRow(vm.filter, vm::selectFilter)
 
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
-                        vm.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                        vm.loading -> CircularProgressIndicator(
+                            Modifier.align(Alignment.Center),
+                            color = KernTheme.colors.accent,
+                        )
                         vm.view == BrowserView.RECENT -> RecentView(vm, ::openScanned) { menuDoc = it }
                         else -> AllView(vm, onSortClick = { sortOpen = true }, onOpen = ::openScanned) { menuDoc = it }
                     }
@@ -215,6 +234,7 @@ fun FileBrowserScreen(
     deleteDoc?.let { doc ->
         AlertDialog(
             onDismissRequest = { deleteDoc = null },
+            containerColor = KernTheme.colors.surface,
             title = { Text("Delete file?") },
             text = { Text("\"${doc.name}\" will be permanently deleted from this device. This cannot be undone.") },
             confirmButton = {
@@ -222,7 +242,7 @@ fun FileBrowserScreen(
                     val ok = vm.delete(doc)
                     deleteDoc = null
                     scope.launch { snackbar.showSnackbar(if (ok) "Deleted" else "Could not delete the file") }
-                }) { Text("Delete", color = Color(0xFFD6453D)) }
+                }) { Text("Delete", color = KernTheme.colors.danger) }
             },
             dismissButton = { TextButton(onClick = { deleteDoc = null }) { Text("Cancel") } },
         )
@@ -230,123 +250,122 @@ fun FileBrowserScreen(
 }
 
 @Composable
-private fun BrowserHeader(layoutIsList: Boolean, onToggleLayout: () -> Unit) {
+private fun BrowserHeader(
+    layoutIsList: Boolean,
+    onToggleLayout: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val colors = KernTheme.colors
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.bg)
+            .heightIn(min = 46.dp)
+            .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("kern", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Row(
-            modifier = Modifier
-                .padding(start = 10.dp)
-                .background(KernAccent.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
-                .padding(horizontal = 9.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Default.Lock, contentDescription = null, tint = KernAccent, modifier = Modifier.size(11.dp))
-            Text(
-                "ON-DEVICE",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = KernAccent,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
-        Box(Modifier.weight(1f))
-        IconButton(onClick = onToggleLayout) {
-            Icon(
-                if (layoutIsList) Icons.Default.GridView else Icons.AutoMirrored.Filled.ViewList,
-                contentDescription = "Toggle layout",
-            )
-        }
+        BrandMark(Modifier.size(26.dp))
+        Text(
+            "kern",
+            style = TextStyle(fontFamily = QuicksandFamily, fontWeight = FontWeight.Bold, fontSize = 21.sp),
+            color = colors.text,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        OnDevicePill(Modifier.padding(start = 10.dp))
+        Spacer(Modifier.weight(1f))
+        KernIconButton(KernIcons.Settings, "Settings", onOpenSettings)
+        KernIconButton(
+            if (layoutIsList) KernIcons.Grid else KernIcons.List,
+            "Toggle layout",
+            onToggleLayout,
+        )
     }
 }
 
 @Composable
-private fun SegmentedTabs(view: BrowserView, onSelect: (BrowserView) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        for (v in BrowserView.entries) {
-            val selected = v == view
-            Surface(
-                onClick = { onSelect(v) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
-                shadowElevation = if (selected) 1.dp else 0.dp,
-            ) {
-                Text(
-                    text = if (v == BrowserView.RECENT) "Recent" else "All files",
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    fontSize = 14.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+private fun BrowserTabs(view: BrowserView, onSelect: (BrowserView) -> Unit) {
+    KernSegmented(
+        items = listOf(SegmentItem("Recent"), SegmentItem("All files")),
+        selectedIndex = if (view == BrowserView.RECENT) 0 else 1,
+        onSelect = { onSelect(if (it == 0) BrowserView.RECENT else BrowserView.ALL) },
+        fillWidth = true,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = KernTheme.density.screenPadding, vertical = 8.dp),
+    )
 }
 
 @Composable
-private fun SearchBar(query: String, onChange: (String) -> Unit) {
+private fun SearchField(query: String, onChange: (String) -> Unit) {
+    val colors = KernTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+            .padding(horizontal = KernTheme.density.screenPadding)
+            .height(46.dp)
+            .border(1.dp, colors.border, RoundedCornerShape(KernRadius.field))
+            .background(colors.surface, RoundedCornerShape(KernRadius.field))
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 14.dp)) {
+        Icon(KernIcons.Search, contentDescription = null, tint = colors.textMid, modifier = Modifier.size(19.dp))
+        Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             if (query.isEmpty()) {
-                Text("Search Documents & Downloads", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                Text("Search Documents & Downloads", color = colors.textMid, style = KernType.body.copy(fontWeight = FontWeight.Normal))
             }
             BasicTextField(
                 value = query,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = TextStyle(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                textStyle = KernType.body.copy(color = colors.text, fontWeight = FontWeight.Normal),
+                cursorBrush = SolidColor(colors.accent),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
         if (query.isNotEmpty()) {
-            IconButton(onClick = { onChange("") }) { Icon(Icons.Default.Close, contentDescription = "Clear") }
+            KernIconButton(KernIcons.Close, "Clear", { onChange("") }, iconSize = 18.dp)
         }
     }
 }
 
 @Composable
-private fun FilterChips(filter: DocumentFormat?, onSelect: (DocumentFormat?) -> Unit) {
+private fun FilterChipsRow(filter: DocumentFormat?, onSelect: (DocumentFormat?) -> Unit) {
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = KernTheme.density.screenPadding, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            FilterChip(selected = filter == null, onClick = { onSelect(null) }, label = { Text("All") })
+            BrowserFilterChip(label = "All", color = null, active = filter == null) { onSelect(null) }
         }
         items(DocumentFormat.entries) { fmt ->
-            val style = fmt.style()
-            FilterChip(
-                selected = filter == fmt,
-                onClick = { onSelect(fmt) },
-                label = { Text(fmt.label) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = style.hue.copy(alpha = 0.16f),
-                    selectedLabelColor = style.hue,
-                ),
-            )
+            BrowserFilterChip(label = fmt.label, color = KernTheme.formatColor(fmt), active = filter == fmt) { onSelect(fmt) }
         }
+    }
+}
+
+@Composable
+private fun BrowserFilterChip(label: String, color: Color?, active: Boolean, onClick: () -> Unit) {
+    val colors = KernTheme.colors
+    val accent = color ?: colors.accent
+    val bg = if (active) accent.copy(alpha = if (colors.dark) 0.22f else 0.14f) else Color.Transparent
+    val contentColor = if (active) accent else colors.textMid
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(KernRadius.pill))
+            .background(bg)
+            .then(if (active) Modifier else Modifier.border(1.dp, colors.border, RoundedCornerShape(KernRadius.pill)))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        if (active && color != null) {
+            Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+        }
+        Text(
+            label,
+            style = KernType.chip.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium),
+            color = contentColor,
+        )
     }
 }
 
@@ -354,26 +373,32 @@ private fun FilterChips(filter: DocumentFormat?, onSelect: (DocumentFormat?) -> 
 private fun RecentView(vm: FileBrowserViewModel, onOpen: (ScannedDoc) -> Unit, onMore: (ScannedDoc) -> Unit) {
     val pinned = vm.pinnedDocs
     val recent = vm.recentDocs
+    val pad = KernTheme.density.screenPadding
     Column(Modifier.fillMaxSize()) {
         if (pinned.isNotEmpty() && vm.query.isBlank()) {
-            SectionLabel("Pinned")
+            SectionLabel("Pinned", Modifier.padding(start = pad, end = pad, top = 16.dp, bottom = 8.dp))
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
+                contentPadding = PaddingValues(horizontal = pad),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(pinned) { doc -> Box(Modifier.width(140.dp)) { FileCard(doc, onOpen, onMore) } }
+                items(pinned, key = { it.path }) { doc ->
+                    Box(Modifier.width(132.dp)) { FileCard(doc, pinned = true, onOpen, onMore) }
+                }
             }
         }
-        SectionLabel("Recent")
+        SectionLabel(
+            "Recent",
+            Modifier.padding(start = pad, end = pad, top = 16.dp, bottom = 8.dp),
+            trailing = { Text("${recent.size}", style = KernType.meta, color = KernTheme.colors.textDim) },
+        )
         if (recent.isEmpty()) {
             EmptyState(
-                title = if (vm.query.isBlank()) "Nothing opened yet" else "No matches",
-                body = if (vm.query.isBlank()) "Files you open will show up here for quick access."
-                else "No recently opened file matches your search.",
+                searching = vm.query.isNotBlank(),
+                query = vm.query,
                 modifier = Modifier.weight(1f),
             )
         } else {
-            FilesList(recent, vm.layout, onOpen, onMore, Modifier.weight(1f))
+            FilesList(recent, vm.layout, vm::isPinned, onOpen, onMore, Modifier.weight(1f))
         }
     }
 }
@@ -386,40 +411,32 @@ private fun AllView(
     onMore: (ScannedDoc) -> Unit,
 ) {
     val docs = vm.allDocs
+    val colors = KernTheme.colors
+    val pad = KernTheme.density.screenPadding
     Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "${(vm.filter?.label ?: "All files")}  ·  ${docs.size}",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Box(Modifier.weight(1f))
-            Row(
-                modifier = Modifier.clickable { onSortClick() }.padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    if (vm.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(14.dp),
-                )
-                Text(vm.sort.label, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 5.dp))
-            }
-        }
+        SectionLabel(
+            "${vm.filter?.label ?: "All files"}  ·  ${docs.size}",
+            Modifier.padding(start = pad, end = pad, top = 14.dp, bottom = 8.dp),
+            trailing = {
+                Row(
+                    modifier = Modifier.clip(RoundedCornerShape(KernRadius.innerSmall)).clickable { onSortClick() }.padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        if (vm.sortAscending) KernIcons.ArrowUp else KernIcons.ArrowDown,
+                        contentDescription = null,
+                        tint = colors.accent,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(vm.sort.label, style = KernType.meta, color = colors.textMid)
+                }
+            },
+        )
         if (docs.isEmpty()) {
-            EmptyState(
-                title = if (vm.query.isBlank() && vm.filter == null) "No documents" else "No matches",
-                body = "Kern reads files from Documents and Downloads. Nothing is copied or uploaded.",
-                modifier = Modifier.weight(1f),
-            )
+            EmptyState(searching = vm.query.isNotBlank() || vm.filter != null, query = vm.query, modifier = Modifier.weight(1f))
         } else {
-            FilesList(docs, vm.layout, onOpen, onMore, Modifier.weight(1f))
+            FilesList(docs, vm.layout, vm::isPinned, onOpen, onMore, Modifier.weight(1f))
         }
     }
 }
@@ -428,170 +445,217 @@ private fun AllView(
 private fun FilesList(
     docs: List<ScannedDoc>,
     layout: BrowserLayout,
+    isPinned: (ScannedDoc) -> Boolean,
     onOpen: (ScannedDoc) -> Unit,
     onMore: (ScannedDoc) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pad = KernTheme.density.screenPadding
     if (layout == BrowserLayout.GRID) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 96.dp),
+            contentPadding = PaddingValues(start = pad, end = pad, top = 4.dp, bottom = 96.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(docs, key = { it.path }) { doc -> FileCard(doc, onOpen, onMore) }
+            items(docs, key = { it.path }) { doc -> FileCard(doc, isPinned(doc), onOpen, onMore) }
         }
     } else {
         LazyColumn(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 96.dp)) {
-            items(docs, key = { it.path }) { doc -> FileRow(doc, onOpen, onMore) }
+            items(docs, key = { it.path }) { doc ->
+                FileRow(doc, isPinned(doc), onOpen, onMore)
+                KernDivider(startIndent = 76.dp)
+            }
         }
     }
 }
 
 @Composable
-private fun FileRow(doc: ScannedDoc, onOpen: (ScannedDoc) -> Unit, onMore: (ScannedDoc) -> Unit) {
-    val style = doc.format.style()
+private fun FileRow(doc: ScannedDoc, pinned: Boolean, onOpen: (ScannedDoc) -> Unit, onMore: (ScannedDoc) -> Unit) {
+    val colors = KernTheme.colors
+    val hue = KernTheme.formatColor(doc.format)
     Row(
-        modifier = Modifier.fillMaxWidth().clickable { onOpen(doc) }.padding(horizontal = 18.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpen(doc) }
+            .heightIn(min = KernTheme.density.rowMinHeight)
+            .padding(horizontal = KernTheme.density.screenPadding, vertical = KernTheme.density.rowPaddingVertical),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FormatTile(style.mono, style.hue, 40.dp)
+        FileBadge(doc.format, viewOnly = doc.viewOnly)
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(doc.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(doc.name, style = KernType.fileName, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(doc.format.monogram, style = KernType.meta.copy(fontWeight = FontWeight.SemiBold), color = hue)
+                Text(
+                    "  ·  ${prettySize(doc.size)}  ·  ${prettyDate(doc.modified)}${if (doc.viewOnly) "  ·  view" else ""}",
+                    style = KernType.meta,
+                    color = colors.textMid,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (pinned) {
+            Icon(KernIcons.StarFilled, contentDescription = "Pinned", tint = colors.accent, modifier = Modifier.size(15.dp).padding(end = 2.dp))
+        }
+        KernIconButton(KernIcons.More, "More", { onMore(doc) })
+    }
+}
+
+@Composable
+private fun FileCard(doc: ScannedDoc, pinned: Boolean, onOpen: (ScannedDoc) -> Unit, onMore: (ScannedDoc) -> Unit) {
+    val colors = KernTheme.colors
+    val hue = KernTheme.formatColor(doc.format)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(KernRadius.base))
+            .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.base))
+            .background(colors.surface)
+            .clickable { onOpen(doc) },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(92.dp)
+                .background(hue.copy(alpha = if (colors.dark) 0.16f else 0.10f)),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                "${style.mono}  ·  ${prettySize(doc.size)}  ·  ${prettyDate(doc.modified)}",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                doc.format.monogram,
+                style = KernType.meta.copy(fontWeight = FontWeight.Bold, fontSize = 26.sp),
+                color = hue,
+            )
+            if (pinned) {
+                Icon(
+                    KernIcons.StarFilled,
+                    contentDescription = "Pinned",
+                    tint = colors.accent,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(15.dp),
+                )
+            }
+            if (doc.viewOnly) {
+                Icon(
+                    KernIcons.Lock,
+                    contentDescription = "View only",
+                    tint = colors.textMid,
+                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp).size(14.dp),
+                )
+            }
+        }
+        Column(Modifier.padding(10.dp)) {
+            Text(doc.name, style = KernType.body.copy(fontSize = 13.sp), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "${prettySize(doc.size)}  ·  ${prettyDate(doc.modified)}",
+                style = KernType.caption,
+                color = colors.textMid,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
-        IconButton(onClick = { onMore(doc) }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
     }
 }
 
 @Composable
-private fun FileCard(doc: ScannedDoc, onOpen: (ScannedDoc) -> Unit, onMore: (ScannedDoc) -> Unit) {
-    val style = doc.format.style()
-    Surface(
-                onClick = { onOpen(doc) },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 1.dp,
-    ) {
-        Column {
-            Box(
-                modifier = Modifier.fillMaxWidth().height(80.dp).background(style.hue.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(style.mono, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = style.hue)
-            }
-            Column(Modifier.padding(10.dp)) {
-                Text(doc.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${prettySize(doc.size)}  ·  ${prettyDate(doc.modified)}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun FormatTile(mono: String, hue: Color, size: androidx.compose.ui.unit.Dp) {
-    Box(
-        modifier = Modifier.size(size).background(hue.copy(alpha = 0.14f), RoundedCornerShape(9.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(mono, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = hue)
-    }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text.uppercase(),
-        fontFamily = FontFamily.Monospace,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp),
-    )
-}
-
-@Composable
-private fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
+private fun EmptyState(searching: Boolean, query: String, modifier: Modifier = Modifier) {
+    val colors = KernTheme.colors
     Column(
         modifier = modifier.fillMaxWidth().padding(44.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Box(
+            Modifier.size(64.dp).clip(RoundedCornerShape(KernRadius.field)).background(colors.sunken),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (searching) KernIcons.Search else KernIcons.Folder,
+                contentDescription = null,
+                tint = colors.textDim,
+                modifier = Modifier.size(30.dp),
+            )
+        }
         Text(
-            body,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.padding(top = 6.dp),
+            if (searching) "No matches" else "No documents yet",
+            style = KernType.sectionTitle,
+            color = colors.text,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        Text(
+            if (searching) "Nothing in Documents or Downloads matches \"$query\"."
+            else "Files you open from your file manager will appear here. Kern reads them in place: nothing is copied or uploaded.",
+            style = KernType.body.copy(fontSize = 13.5.sp, fontWeight = FontWeight.Normal),
+            color = colors.textMid,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp).width(240.dp),
         )
     }
 }
 
 @Composable
 private fun PermissionGate(onGrant: () -> Unit, onPickFile: () -> Unit) {
+    val colors = KernTheme.colors
     Column(
         modifier = Modifier.fillMaxSize().padding(36.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Icons.Default.Lock, contentDescription = null, tint = KernAccent, modifier = Modifier.size(40.dp))
-        Text("Storage access needed", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 14.dp))
+        Box(
+            Modifier.size(64.dp).clip(RoundedCornerShape(KernRadius.field)).background(colors.accentSoft),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(KernIcons.Shield, contentDescription = null, tint = colors.accent, modifier = Modifier.size(30.dp))
+        }
+        Text("Storage access needed", style = KernType.sectionTitle, color = colors.text, modifier = Modifier.padding(top = 14.dp))
         Text(
             "Kern lists documents from your Documents and Downloads folders and edits them in place. It never copies your files and has no network access.",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            style = KernType.body.copy(fontWeight = FontWeight.Normal),
+            color = colors.textMid,
+            textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp),
         )
-        TextButton(onClick = onGrant, modifier = Modifier.padding(top = 16.dp)) { Text("Grant access") }
-        TextButton(onClick = onPickFile) { Text("Or open a single file") }
+        TextButton(onClick = onGrant, modifier = Modifier.padding(top = 16.dp)) { Text("Grant access", color = colors.accent) }
+        TextButton(onClick = onPickFile) { Text("Or open a single file", color = colors.textMid) }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SortSheet(vm: FileBrowserViewModel, onClose: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-            Text("Sort by", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-            for (key in SortKey.entries) {
-                val selected = vm.sort == key
-                ListItem(
-                    headlineContent = { Text(key.label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
-                    trailingContent = {
-                        if (selected) {
-                            Icon(
-                                if (vm.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    },
-                    modifier = Modifier.clickable { vm.pickSort(key) },
-                )
-            }
-            Text(
-                "Tap the active field again to reverse direction.",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    KernBottomSheet(onDismiss = onClose, title = "Sort by") {
+        for (key in SortKey.entries) {
+            val selected = vm.sort == key
+            SheetActionRow(
+                icon = if (selected && !vm.sortAscending) KernIcons.ArrowDown else KernIcons.ArrowUp,
+                label = key.label,
+                sublabel = if (selected) sortDirectionLabel(key, vm.sortAscending) else null,
+                onClick = { vm.pickSort(key) },
+                trailing = {
+                    if (selected) {
+                        Icon(KernIcons.Check, contentDescription = null, tint = KernTheme.colors.accent, modifier = Modifier.size(18.dp))
+                    }
+                },
             )
         }
+        Text(
+            "Tap the active field again to reverse direction.",
+            style = KernType.caption,
+            color = KernTheme.colors.textDim,
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
+        )
+        Spacer(Modifier.height(12.dp))
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private fun sortDirectionLabel(key: SortKey, ascending: Boolean): String = when (key) {
+    SortKey.RECENT -> if (ascending) "Oldest first" else "Newest first"
+    SortKey.NAME -> if (ascending) "A to Z" else "Z to A"
+    SortKey.SIZE -> if (ascending) "Smallest first" else "Largest first"
+    SortKey.TYPE -> if (ascending) "A to Z" else "Z to A"
+}
+
 @Composable
 private fun ActionsSheet(
     doc: ScannedDoc,
@@ -603,34 +667,26 @@ private fun ActionsSheet(
     onDelete: () -> Unit,
     onClose: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-            Text(doc.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(16.dp))
-            ActionRow(Icons.Default.FolderOpen, "Open", onOpen)
-            ActionRow(if (pinned) Icons.Default.Star else Icons.Default.StarBorder, if (pinned) "Unpin" else "Pin to top", onTogglePin)
-            ActionRow(Icons.Default.Share, "Share a copy", onShare)
-            ActionRow(Icons.Default.Info, "File info", onInfo)
-            ActionRow(Icons.Default.Delete, "Delete", onDelete, danger = true)
-        }
+    KernBottomSheet(onDismiss = onClose, title = doc.name) {
+        SheetActionRow(KernIcons.Doc, "Open", onOpen)
+        SheetActionRow(
+            if (pinned) KernIcons.StarFilled else KernIcons.Star,
+            if (pinned) "Unpin" else "Pin to top",
+            onTogglePin,
+        )
+        SheetActionRow(KernIcons.Share, "Share a copy", onShare)
+        SheetActionRow(KernIcons.Info, "File info", onInfo)
+        SheetActionRow(KernIcons.Trash, "Delete", onDelete, danger = true)
+        Spacer(Modifier.height(12.dp))
     }
-}
-
-@Composable
-private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, danger: Boolean = false) {
-    val color = if (danger) Color(0xFFD6453D) else MaterialTheme.colorScheme.onSurface
-    ListItem(
-        headlineContent = { Text(label, color = color) },
-        leadingContent = { Icon(icon, contentDescription = null, tint = if (danger) Color(0xFFD6453D) else MaterialTheme.colorScheme.onSurfaceVariant) },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable { onClick() },
-    )
 }
 
 @Composable
 private fun FileInfoDialog(doc: ScannedDoc, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+        containerColor = KernTheme.colors.surface,
+        confirmButton = { TextButton(onClick = onClose) { Text("Close", color = KernTheme.colors.accent) } },
         title = { Text(doc.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column {
@@ -646,10 +702,13 @@ private fun FileInfoDialog(doc: ScannedDoc, onClose: () -> Unit) {
 @Composable
 private fun InfoLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(76.dp))
-        Text(value, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = KernType.meta, color = KernTheme.colors.textMid, modifier = Modifier.width(80.dp))
+        Text(value, style = KernType.body.copy(fontWeight = FontWeight.Normal), color = KernTheme.colors.text)
     }
 }
+
+/** EPUB is read-only in this alpha; everything else is editable. */
+private val ScannedDoc.viewOnly: Boolean get() = format == DocumentFormat.EPUB
 
 private fun shareDoc(context: android.content.Context, doc: ScannedDoc) {
     val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(doc.path))

@@ -13,9 +13,10 @@ android {
         minSdk = 26
         targetSdk = 35
         // A.B.C.D versioning: D=2+ are real patches, one issue each (see release plan).
-        // 0.1.8.1 adds tests for Excel persistence
-        versionCode = 21
-        versionName = "0.1.8.1"
+        // 0.1.9.0 is the UI update: design system + reskin of every screen. This is a
+        // C bump, so a tests-only 0.1.9.1 is required before any 0.1.9.2 patch.
+        versionCode = 22
+        versionName = "0.1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

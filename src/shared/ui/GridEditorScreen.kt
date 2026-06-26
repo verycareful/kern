@@ -35,6 +35,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import dev.kern.shared.CellMerge
+import dev.kern.shared.theme.KernRadius
+import dev.kern.shared.theme.KernTheme
+import dev.kern.shared.theme.KernType
+import dev.kern.shared.theme.OutfitFamily
+import dev.kern.shared.theme.PlexMonoFamily
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +80,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -160,46 +168,40 @@ fun GridEditorScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        containerColor = KernTheme.colors.bg,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = if (dirty) "Unsaved changes" else "Saved - on device",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (dirty) hue else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { backDispatcher?.onBackPressed() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            KernTopBar(
+                title = title,
+                monoTitle = true,
+                formatColor = hue,
+                subtitle = if (dirty) "● Unsaved changes" else "Saved · on-device",
+                subtitleColor = if (dirty) KernTheme.colors.accent else null,
+                onBack = { backDispatcher?.onBackPressed() },
                 actions = {
-                    IconButton(
-                        onClick = { onSave { ok, msg ->
-                            if (ok) scope.launch { snackbar.showSnackbar("Saved") }
-                            else errorDialog = "Save failed" to (msg ?: "This file is read-only. Use Export to save a copy.")
-                        } },
+                    KernIconButton(
+                        KernIcons.Save,
+                        "Save",
+                        onClick = {
+                            onSave { ok, msg ->
+                                if (ok) scope.launch { snackbar.showSnackbar("Saved") }
+                                else errorDialog = "Save failed" to (msg ?: "This file is read-only. Use Export to save a copy.")
+                            }
+                        },
                         enabled = dirty,
-                    ) { Icon(Icons.Default.Save, contentDescription = "Save", tint = if (dirty) hue else MaterialTheme.colorScheme.onSurfaceVariant) }
-                    IconButton(onClick = { exportLauncher.launch(exportFileName) }) {
-                        Icon(Icons.Default.FileDownload, contentDescription = "Export a copy")
-                    }
+                        tint = if (dirty) KernTheme.colors.accent else null,
+                    )
+                    KernIconButton(KernIcons.Download, "Export a copy", onClick = { exportLauncher.launch(exportFileName) })
                 },
             )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                loading -> CircularProgressIndicator(Modifier.align(Alignment.Center), color = KernTheme.colors.accent)
                 error != null -> Text(
                     text = error,
                     modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                    color = MaterialTheme.colorScheme.error,
+                    color = KernTheme.colors.danger,
                 )
                 else -> Column(Modifier.fillMaxSize()) {
                     if (sheetNames.size > 1) SheetBar(sheetNames, currentSheet, onSelectSheet, hue)
@@ -211,23 +213,22 @@ fun GridEditorScreen(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(8.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                                    .background(KernTheme.colors.sunken, RoundedCornerShape(KernRadius.innerSmall))
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             ) {
-                                Text("${(zoom.scale * 100).roundToInt()}%", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = hue)
+                                Text("${(zoom.scale * 100).roundToInt()}%", style = KernType.meta, color = hue)
                             }
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TextButton(onClick = onAddRow) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp)); Text("Row")
-                        }
-                        TextButton(onClick = onAddColumn) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp)); Text("Column")
-                        }
+                    EditorToolbar {
+                        ToolbarButton(KernIcons.Undo, "Undo", onClick = {}, enabled = false)
+                        ToolbarButton(KernIcons.Redo, "Redo", onClick = {}, enabled = false)
+                        ToolbarSeparator()
+                        ToolbarButton(KernIcons.Plus, "Insert row", onClick = onAddRow, label = "Row")
+                        ToolbarButton(KernIcons.Plus, "Insert column", onClick = onAddColumn, label = "Col")
+                        ToolbarSeparator()
+                        ToolbarButton(KernIcons.Sort, "Sort", onClick = {}, enabled = false)
+                        ToolbarButton(KernIcons.Filter, "Filter", onClick = {}, enabled = false)
                     }
                 }
             }
@@ -258,18 +259,15 @@ private fun SheetBar(names: List<String>, current: Int, onSelect: (Int) -> Unit,
             val selected = i == current
             Box(
                 modifier = Modifier
-                    .background(
-                        color = if (selected) hue.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(6.dp),
-                    )
+                    .clip(RoundedCornerShape(KernRadius.innerSmall))
+                    .background(if (selected) hue.copy(alpha = if (KernTheme.colors.dark) 0.2f else 0.13f) else KernTheme.colors.sunken)
                     .clickable { onSelect(i) }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(
                     text = name,
-                    color = if (selected) hue else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 13.sp,
+                    color = if (selected) hue else KernTheme.colors.textMid,
+                    style = KernType.chip.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
                     maxLines = 1,
                 )
             }
@@ -286,24 +284,39 @@ private fun CellReferenceBar(
     hue: Color,
     onEditSelected: (String) -> Unit,
 ) {
+    val colors = KernTheme.colors
     val ref = if (hasCells) "${spreadsheetColumnLabel(selectedCol)}${selectedRow + 1}" else "-"
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .background(colors.bg)
+            .padding(horizontal = KernTheme.density.screenPadding, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(ref, color = hue, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-        OutlinedTextField(
-            value = value,
-            onValueChange = onEditSelected,
-            enabled = hasCells,
-            singleLine = true,
-            placeholder = { Text("Empty cell") },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(KernRadius.innerSmall))
+                .background(colors.sunken)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        ) {
+            Text(ref, style = KernType.meta.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.accent)
+        }
+        Text("=", style = KernType.meta.copy(fontSize = 13.sp), color = colors.textDim)
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) {
+                Text("Empty cell", style = KernType.meta.copy(fontSize = 13.sp), color = colors.textDim)
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onEditSelected,
+                enabled = hasCells,
+                singleLine = true,
+                textStyle = KernType.meta.copy(fontSize = 13.sp, color = colors.text),
+                cursorBrush = SolidColor(colors.accent),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -612,6 +625,7 @@ private fun Grid(
                                     fontSize = cellFont,
                                     selected = isSelected,
                                     hue = hue,
+                                    isHeader = oR == 0,
                                     onClick = { handleSelect(oR, oC) },
                                 )
                             }
@@ -644,6 +658,7 @@ private fun Grid(
                                 fontSize = cellFont,
                                 selected = isSelected,
                                 hue = hue,
+                                isHeader = merge.firstRow == 0,
                                 onClick = { handleSelect(merge.firstRow, merge.firstCol) },
                             )
                         }
@@ -663,19 +678,20 @@ private fun Grid(
 
 @Composable
 private fun Tile(text: String, width: Dp, height: Dp, fontSize: TextUnit, hue: Color, selected: Boolean) {
+    val colors = KernTheme.colors
     Box(
         modifier = Modifier
             .size(width, height)
-            .background(if (selected) hue.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant)
-            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+            .background(if (selected) colors.accentSoft else colors.sunken)
+            .border(0.5.dp, colors.borderSoft),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = PlexMonoFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = fontSize,
-            color = if (selected) hue else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) colors.accent else colors.textMid,
         )
     }
 }
@@ -688,17 +704,32 @@ private fun GridCell(
     fontSize: TextUnit,
     selected: Boolean,
     hue: Color,
+    isHeader: Boolean,
     onClick: () -> Unit,
 ) {
+    val colors = KernTheme.colors
+    val bg = when {
+        selected -> colors.accentSoft
+        isHeader -> hue.copy(alpha = if (colors.dark) 0.20f else 0.13f)
+        else -> colors.surface
+    }
     Box(
         modifier = Modifier
             .size(width, height)
-            .background(if (selected) hue.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface)
-            .border(width = if (selected) 2.dp else 0.5.dp, color = if (selected) hue else MaterialTheme.colorScheme.outlineVariant)
+            .background(bg)
+            .border(width = if (selected) 2.dp else 0.5.dp, color = if (selected) colors.accent else colors.borderSoft)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = fontSize, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            value,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = fontSize,
+            fontFamily = if (isHeader) PlexMonoFamily else OutfitFamily,
+            fontWeight = if (isHeader) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isHeader) hue else colors.text,
+        )
     }
 }
