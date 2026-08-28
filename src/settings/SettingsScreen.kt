@@ -57,7 +57,7 @@ internal val AccentSwatch = 30.dp
 internal val AccentCheckSize = 16.dp
 internal val AccentRingWidth = 2.dp
 internal val TrailingIconSize = 18.dp
-internal const val APP_VERSION = "0.1.9.0"
+internal const val APP_VERSION = "0.1.9.1"
 internal const val SCAN_DOCUMENTS_PATH = "/Documents"
 internal const val SCAN_DOWNLOADS_PATH = "/Downloads"
 internal const val PERMISSION_GRANTED = "GRANTED"
@@ -84,6 +84,7 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             BrandLockupRow()
             PrivacyHero()
+            Spacer(Modifier.height(GroupSpacing))
             AppearanceGroup(
                 themeMode = settings.themeMode,
                 onThemeMode = settings::updateThemeMode,

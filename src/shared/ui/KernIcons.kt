@@ -28,7 +28,10 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FormatBold
+import androidx.compose.material.icons.outlined.FormatColorText
 import androidx.compose.material.icons.outlined.FormatItalic
+import androidx.compose.material.icons.outlined.FormatSize
+import androidx.compose.material.icons.outlined.FormatStrikethrough
 import androidx.compose.material.icons.outlined.FormatUnderlined
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Info
@@ -92,6 +95,9 @@ object KernIcons {
     val Bold = Icons.Outlined.FormatBold
     val Italic = Icons.Outlined.FormatItalic
     val Underline = Icons.Outlined.FormatUnderlined
+    val Strikethrough = Icons.Outlined.FormatStrikethrough
+    val FontColor = Icons.Outlined.FormatColorText
+    val FontSize = Icons.Outlined.FormatSize
     val Bullet = Icons.AutoMirrored.Outlined.FormatListBulleted
     val Table = Icons.Outlined.TableChart
     val Slides = Icons.Outlined.Slideshow

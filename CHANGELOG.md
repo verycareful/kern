@@ -2,6 +2,20 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.9.1] - 2026-08-28 13:08 IST
+
+### Tests
+- **Settings Screen Instrumented Coverage** (`SettingsScreenTest.kt`): smoke verification and license dialog display, scroll, and dismissal
+- **Settings Persistence Instrumented Coverage** (`KernSettingsTest.kt`): SharedPreferences-backed persistence and state flow for theme mode, accent color, density, and scan toggles
+- **Segmented Control Instrumented Coverage** (`KernSegmentedTest.kt`): click handling and index selection
+- **Theme & Token Unit Tests** (`ThemeTokensTest.kt`): token resolution, light/dark contrasts, and format color mappings
+- **Document Format Unit Tests** (`DocumentFormatTest.kt`): MIME type and file extension matching
+- **Spreadsheet Label Unit Tests** (`SpreadsheetLabelTest.kt`): column index to letter label conversions
+- **Word Document Unit Tests** (`WordDocumentTest.kt`): block/run model parsing, run formatting preservation, null-safe run attributes, and table index stability
+
+### Results
+- All unit and instrumented suites passed in Android Studio; visual inspection and interaction verified on device over USB debugging
+
 ## [0.1.9.0] - 2026-06-26 18:55 IST
 
 ### Added
