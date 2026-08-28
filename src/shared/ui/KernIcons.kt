@@ -2,6 +2,8 @@ package dev.kern.shared.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.FormatIndentDecrease
+import androidx.compose.material.icons.automirrored.outlined.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -26,14 +28,22 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.FindReplace
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FormatAlignCenter
+import androidx.compose.material.icons.outlined.FormatAlignJustify
+import androidx.compose.material.icons.outlined.FormatAlignLeft
+import androidx.compose.material.icons.outlined.FormatAlignRight
 import androidx.compose.material.icons.outlined.FormatBold
 import androidx.compose.material.icons.outlined.FormatColorText
 import androidx.compose.material.icons.outlined.FormatItalic
+import androidx.compose.material.icons.outlined.FormatListNumbered
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.FormatStrikethrough
 import androidx.compose.material.icons.outlined.FormatUnderlined
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Image
+
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Link
@@ -99,6 +109,15 @@ object KernIcons {
     val FontColor = Icons.Outlined.FormatColorText
     val FontSize = Icons.Outlined.FormatSize
     val Bullet = Icons.AutoMirrored.Outlined.FormatListBulleted
+    val NumberedList = Icons.Outlined.FormatListNumbered
+    val AlignLeft = Icons.Outlined.FormatAlignLeft
+    val AlignCenter = Icons.Outlined.FormatAlignCenter
+    val AlignRight = Icons.Outlined.FormatAlignRight
+    val AlignJustify = Icons.Outlined.FormatAlignJustify
+    val IndentIncrease = Icons.AutoMirrored.Outlined.FormatIndentIncrease
+    val IndentDecrease = Icons.AutoMirrored.Outlined.FormatIndentDecrease
+    val FindReplace = Icons.Outlined.FindReplace
+    val Image = Icons.Outlined.Image
     val Table = Icons.Outlined.TableChart
     val Slides = Icons.Outlined.Slideshow
     val Pen = Icons.Outlined.Edit

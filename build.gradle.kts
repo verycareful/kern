@@ -7,13 +7,14 @@ plugins {
 android {
     namespace = "dev.kern"
     compileSdk = 35
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
-        versionName = "0.1.9.1"
+        versionCode = 24
+        versionName = "0.1.10.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {

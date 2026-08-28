@@ -2,6 +2,19 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.10.0] - 2026-08-28 13:25 IST
+
+### Added
+- **Word Editor Rich-Text Engine**: POI XWPF block and run model over `doc.bodyElements` with non-destructive surgical round-trip serialization
+- **Character Formatting Toolbar**: Bold, Italic, Underline, Strikethrough, dynamic Caret style tracking, font size picker sheet, and color palette with 12 theme accents, recent colors, and custom hex slots
+- **Paragraph & List Formatting**: Title, Heading 1, Heading 2, and Body paragraph styles; Left, Center, Right, and Justify alignments; Bullet and Numbered lists; Indent increase/decrease
+- **Editable Tables**: In-place table cell text editing, dynamic row insertion (+Row), column insertion (+Col), and row/column deletion (-Row/-Col)
+- **Embedded Media**: Extraction and inline rendering of document raster images
+- **Editing Tools**: 30-step bounded snapshot Undo and Redo history stack; collapsible Find & Replace bar with live match navigation, match counts, and Replace/Replace All; live word and character statistics in document footer
+
+### Results
+- 34 of 35 unit tests passed (15s, local Gradle `testDebugUnitTest`). Expected failure in `read_paragraphWithHyperlinkIsNotEditable` because hyperlinks are now editable in Phase 4/5; test suite will be updated in the mandatory tests-only 0.1.10.1 release
+
 ## [0.1.9.1] - 2026-08-28 13:08 IST
 
 ### Tests

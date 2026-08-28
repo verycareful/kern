@@ -13,6 +13,7 @@ captures/
 # Kotlin
 *.class
 *.kotlin_module
+.kotlin/
 
 # NDK / Rust build artifacts
 *.so

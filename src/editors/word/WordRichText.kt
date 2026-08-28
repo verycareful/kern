@@ -184,5 +184,38 @@ object WordRichText {
         return if (h.length == 6 && h.all { it.isHex() }) h else null
     }
 
+    // ---- search highlighting -----------------------------------------------
+
+    /** Applies background highlight spans for occurrences of [query]. */
+    fun highlightMatches(
+        text: AnnotatedString,
+        query: String,
+        matchColor: Color,
+        activeMatchColor: Color,
+        isCurrentBlock: Boolean,
+        currentMatchIndex: Int,
+    ): AnnotatedString {
+        if (query.isBlank() || text.text.isEmpty()) return text
+        return buildAnnotatedString {
+            append(text)
+            val raw = text.text
+            var startIndex = 0
+            var matchCount = 0
+            while (startIndex < raw.length) {
+                val found = raw.indexOf(query, startIndex, ignoreCase = true)
+                if (found < 0) break
+                val end = found + query.length
+                val isCurrent = isCurrentBlock && matchCount == currentMatchIndex
+                addStyle(
+                    SpanStyle(background = if (isCurrent) activeMatchColor else matchColor),
+                    found,
+                    end,
+                )
+                matchCount++
+                startIndex = end
+            }
+        }
+    }
+
     private fun Char.isHex(): Boolean = this in '0'..'9' || this in 'A'..'F'
 }
