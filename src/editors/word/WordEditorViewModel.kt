@@ -363,7 +363,92 @@ class WordEditorViewModel(app: Application) : AndroidViewModel(app) {
         dirty = true
     }
 
-    // ---- Table Operations ---------------------------------------------------
+    // ---- Table Operations & Dedicated Modal --------------------------------
+
+    var activeTableBlockIndex by mutableStateOf<Int?>(null)
+        private set
+    var activeTableData by mutableStateOf<List<List<String>>>(emptyList())
+        private set
+    var activeSelectedRow by mutableIntStateOf(0)
+    var activeSelectedCol by mutableIntStateOf(0)
+
+    fun openTableEditor(blockIndex: Int) {
+        val grid = tableStates[blockIndex] ?: (blocks.getOrNull(blockIndex) as? WordDocument.TableBlock)?.rows ?: return
+        activeTableBlockIndex = blockIndex
+        activeTableData = grid.map { it.toList() }
+        activeSelectedRow = 0
+        activeSelectedCol = 0
+    }
+
+    fun closeTableEditor() {
+        activeTableBlockIndex = null
+        activeTableData = emptyList()
+    }
+
+    fun updateActiveTableCell(row: Int, col: Int, text: String) {
+        if (row !in activeTableData.indices || col !in activeTableData[row].indices) return
+        activeTableData = activeTableData.mapIndexed { r, rList ->
+            if (r == row) {
+                rList.mapIndexed { c, cellText -> if (c == col) text else cellText }
+            } else {
+                rList
+            }
+        }
+    }
+
+    fun insertTableRow(atIndex: Int) {
+        val colCount = activeTableData.firstOrNull()?.size ?: 2
+        val newRow = List(colCount) { "" }
+        val insertPos = atIndex.coerceIn(0, activeTableData.size)
+        val list = activeTableData.toMutableList()
+        list.add(insertPos, newRow)
+        activeTableData = list
+        activeSelectedRow = insertPos
+    }
+
+    fun deleteTableRow(atIndex: Int) {
+        if (activeTableData.size <= 1 || atIndex !in activeTableData.indices) return
+        val list = activeTableData.toMutableList()
+        list.removeAt(atIndex)
+        activeTableData = list
+        if (activeSelectedRow >= activeTableData.size) {
+            activeSelectedRow = (activeTableData.size - 1).coerceAtLeast(0)
+        }
+    }
+
+    fun insertTableColumn(atIndex: Int) {
+        val insertPos = atIndex.coerceIn(0, activeTableData.firstOrNull()?.size ?: 0)
+        activeTableData = activeTableData.map { row ->
+            val rList = row.toMutableList()
+            rList.add(insertPos, "")
+            rList
+        }
+        activeSelectedCol = insertPos
+    }
+
+    fun deleteTableColumn(atIndex: Int) {
+        val colCount = activeTableData.firstOrNull()?.size ?: 0
+        if (colCount <= 1 || atIndex !in 0 until colCount) return
+        activeTableData = activeTableData.map { row ->
+            val rList = row.toMutableList()
+            if (atIndex in rList.indices) rList.removeAt(atIndex)
+            rList
+        }
+        val maxCol = (activeTableData.firstOrNull()?.size ?: 1) - 1
+        if (activeSelectedCol > maxCol) {
+            activeSelectedCol = maxCol.coerceAtLeast(0)
+        }
+    }
+
+    fun saveTableEditor() {
+        val blockIndex = activeTableBlockIndex ?: return
+        val newGrid = activeTableData
+        pushSnapshot()
+        tableStates[blockIndex] = newGrid
+        tableEdits[blockIndex] = newGrid
+        dirty = true
+        closeTableEditor()
+    }
 
     fun editTableCell(blockIndex: Int, row: Int, col: Int, text: String) {
         val grid = tableStates[blockIndex] ?: return

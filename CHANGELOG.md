@@ -2,6 +2,19 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.10.2] - 2026-08-28 13:43 IST
+
+### Added
+- **Dedicated Table Editor Modal** (`TableEditorSheet`): full bottom sheet editor with tap-to-select 2D tile matrix, active tile outline highlight, dedicated cell text input bar (`R{row}:C{col}`), and toolbar controls for inserting/deleting rows and columns at arbitrary positions (+Row Above, +Row Below, -Row, +Col Left, +Col Right, -Col, Done)
+- **Table Preview Cards** (`TablePreviewCard`): compact inline table rendering with dimensions, horizontal scroll for wide tables, and an "Edit Table" action button, replacing previous overflowing inline buttons
+
+### Changed
+- **Virtualized Document Rendering**: replaced static scroll Column with `LazyColumn` and stable block item keys in `WordPage`, eliminating UI latency when viewing and editing large `.docx` files
+
+### Results
+- 37 tests across 8 suites, all passed (19s, local Gradle `testDebugUnitTest`)
+- Visual inspection on device: verified smooth scrolling on large documents, tap-to-select table grid, active cell text editing bar, and arbitrary row/column mutations over USB debugging
+
 ## [0.1.10.1] - 2026-08-28 13:35 IST
 
 ### Tests

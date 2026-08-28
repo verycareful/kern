@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -133,6 +136,12 @@ fun WordEditorScreen(
             current = vm.activeParaProps()?.align ?: WordDocument.Align.START,
             onPick = { vm.setAlignment(it); showAlign = false },
             onDismiss = { showAlign = false },
+        )
+    }
+    if (vm.activeTableBlockIndex != null) {
+        TableEditorSheet(
+            vm = vm,
+            onDismiss = vm::closeTableEditor,
         )
     }
 }
@@ -256,22 +265,35 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
     val colors = KernTheme.colors
     val zoom = rememberZoomState()
     Box(modifier.background(colors.sunken).pinchZoom(zoom)) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp, vertical = 16.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 520.dp)
-                    .clip(RoundedCornerShape(KernRadius.base))
-                    .background(if (colors.dark) colors.raised else colors.surface)
-                    .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.base))
-                    .padding(horizontal = 26.dp, vertical = 28.dp),
-            ) {
-                vm.blocks.forEachIndexed { index, block ->
+            item(key = "paper_header") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = KernRadius.base, topEnd = KernRadius.base))
+                        .background(if (colors.dark) colors.raised else colors.surface)
+                        .border(
+                            1.dp,
+                            colors.borderSoft,
+                            RoundedCornerShape(topStart = KernRadius.base, topEnd = KernRadius.base),
+                        )
+                        .padding(top = 28.dp, start = 26.dp, end = 26.dp),
+                )
+            }
+            itemsIndexed(
+                items = vm.blocks,
+                key = { index, _ -> "block_$index" },
+            ) { index, block ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (colors.dark) colors.raised else colors.surface)
+                        .padding(horizontal = 26.dp),
+                ) {
                     when (block) {
                         is WordDocument.ParagraphBlock -> {
                             val props = vm.paraProps[index] ?: block.props
@@ -286,15 +308,12 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
                             )
                         }
                         is WordDocument.TableBlock -> {
-                            EditableTableView(
+                            val currentRows = vm.tableStates[index] ?: block.rows
+                            TablePreviewCard(
                                 blockIndex = index,
-                                rows = vm.tableStates[index] ?: block.rows,
+                                rows = currentRows,
                                 scale = zoom.scale,
-                                onCellEdit = { r, c, txt -> vm.editTableCell(index, r, c, txt) },
-                                onAddRow = { vm.addTableRow(index) },
-                                onDeleteRow = { r -> vm.deleteTableRow(index, r) },
-                                onAddCol = { vm.addTableColumn(index) },
-                                onDeleteCol = { c -> vm.deleteTableColumn(index, c) },
+                                onEditTable = { vm.openTableEditor(index) },
                             )
                         }
                         is WordDocument.ImageBlock -> {
@@ -304,13 +323,29 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
                     }
                 }
             }
-            Text(
-                "Page 1 of 1 · ${vm.blocks.size} blocks · ${vm.totalWordCount} words · ${vm.totalCharCount} chars",
-                style = KernType.caption,
-                color = colors.textMid,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            )
+            item(key = "paper_footer") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(bottomStart = KernRadius.base, bottomEnd = KernRadius.base))
+                        .background(if (colors.dark) colors.raised else colors.surface)
+                        .border(
+                            1.dp,
+                            colors.borderSoft,
+                            RoundedCornerShape(bottomStart = KernRadius.base, bottomEnd = KernRadius.base),
+                        )
+                        .padding(bottom = 28.dp, start = 26.dp, end = 26.dp),
+                ) {
+                    Spacer(Modifier.height(16.dp))
+                }
+                Text(
+                    "Page 1 of 1 · ${vm.blocks.size} blocks · ${vm.totalWordCount} words · ${vm.totalCharCount} chars",
+                    style = KernType.caption,
+                    color = colors.textMid,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 24.dp),
+                )
+            }
         }
         if (zoom.scale != 1f) {
             Box(
@@ -403,64 +438,231 @@ private fun EditableParagraph(
 }
 
 @Composable
-private fun EditableTableView(
+private fun TablePreviewCard(
     blockIndex: Int,
     rows: List<List<String>>,
     scale: Float,
-    onCellEdit: (row: Int, col: Int, text: String) -> Unit,
-    onAddRow: () -> Unit,
-    onDeleteRow: (row: Int) -> Unit,
-    onAddCol: () -> Unit,
-    onDeleteCol: (col: Int) -> Unit,
+    onEditTable: () -> Unit,
 ) {
     val colors = KernTheme.colors
-    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(KernRadius.innerSmall))
+            .background(colors.sunken)
+            .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall))
+            .padding(12.dp),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Table · ${rows.size}x${rows.firstOrNull()?.size ?: 0}", style = KernType.caption, color = colors.textMid)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ToolbarButton(KernIcons.Plus, "Add Row", onClick = onAddRow, label = "+Row")
-                ToolbarButton(KernIcons.Plus, "Add Col", onClick = onAddCol, label = "+Col")
-                if (rows.size > 1) {
-                    ToolbarButton(KernIcons.Trash, "Delete Row", onClick = { onDeleteRow(rows.size - 1) }, label = "-Row")
-                }
-                if ((rows.firstOrNull()?.size ?: 0) > 1) {
-                    ToolbarButton(KernIcons.Trash, "Delete Col", onClick = { onDeleteCol((rows.firstOrNull()?.size ?: 1) - 1) }, label = "-Col")
-                }
-            }
+            Text(
+                "Table · ${rows.size} rows × ${rows.firstOrNull()?.size ?: 0} cols",
+                style = KernType.meta,
+                color = colors.textMid,
+            )
+            ToolbarButton(
+                icon = KernIcons.Table,
+                contentDescription = "Edit Table",
+                onClick = onEditTable,
+                label = "Edit Table",
+            )
         }
-        Column(
+        Box(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(KernRadius.innerSmall))
-                .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall)),
+                .horizontalScroll(rememberScrollState()),
         ) {
-            rows.forEachIndexed { r, row ->
-                Row(Modifier.fillMaxWidth()) {
-                    row.forEachIndexed { c, cell ->
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .border(0.5.dp, colors.borderSoft)
-                                .padding(6.dp),
-                        ) {
-                            BasicTextField(
-                                value = cell,
-                                onValueChange = { onCellEdit(r, c, it) },
-                                textStyle = TextStyle(
-                                    fontFamily = OutfitFamily,
-                                    fontSize = 14.sp * scale,
-                                    color = colors.text,
-                                ),
-                                cursorBrush = SolidColor(colors.accent),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+            Column(
+                Modifier
+                    .clip(RoundedCornerShape(KernRadius.innerSmall))
+                    .border(0.5.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall)),
+            ) {
+                rows.take(6).forEach { row ->
+                    Row {
+                        row.forEach { cell ->
+                            Box(
+                                Modifier
+                                    .width(100.dp)
+                                    .border(0.5.dp, colors.borderSoft)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    text = cell.ifBlank { "-" },
+                                    style = TextStyle(
+                                        fontFamily = OutfitFamily,
+                                        fontSize = 13.sp * scale,
+                                        color = if (cell.isBlank()) colors.textDim else colors.text,
+                                    ),
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
+                if (rows.size > 6) {
+                    Box(Modifier.padding(6.dp)) {
+                        Text("+ ${rows.size - 6} more rows", style = KernType.caption, color = colors.textDim)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TableEditorSheet(
+    vm: WordEditorViewModel,
+    onDismiss: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    val grid = vm.activeTableData
+    val selectedRow = vm.activeSelectedRow.coerceIn(0, (grid.size - 1).coerceAtLeast(0))
+    val selectedCol = vm.activeSelectedCol.coerceIn(0, ((grid.getOrNull(selectedRow)?.size ?: 1) - 1).coerceAtLeast(0))
+    val activeCellText = grid.getOrNull(selectedRow)?.getOrNull(selectedCol) ?: ""
+
+    KernBottomSheet(
+        onDismiss = onDismiss,
+        title = "Edit Table (${grid.size} × ${grid.firstOrNull()?.size ?: 0})",
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 20.dp),
+        ) {
+            // Active Cell Input Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(KernRadius.innerSmall))
+                    .background(colors.sunken)
+                    .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(KernRadius.innerSmall))
+                        .background(colors.accentSoft)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        "R${selectedRow + 1}:C${selectedCol + 1}",
+                        style = KernType.meta,
+                        color = colors.accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                BasicTextField(
+                    value = activeCellText,
+                    onValueChange = { vm.updateActiveTableCell(selectedRow, selectedCol, it) },
+                    textStyle = TextStyle(
+                        fontFamily = OutfitFamily,
+                        fontSize = 14.sp,
+                        color = colors.text,
+                    ),
+                    cursorBrush = SolidColor(colors.accent),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { inner ->
+                        if (activeCellText.isEmpty()) {
+                            Text("Cell text...", color = colors.textDim, fontSize = 14.sp)
+                        }
+                        inner()
+                    },
+                )
+            }
+
+            // Table Action Controls Toolbar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ToolbarButton(KernIcons.Plus, "Add Row Above", onClick = { vm.insertTableRow(selectedRow) }, label = "+Row Above")
+                    ToolbarButton(KernIcons.Plus, "Add Row Below", onClick = { vm.insertTableRow(selectedRow + 1) }, label = "+Row Below")
+                    if (grid.size > 1) {
+                        ToolbarButton(KernIcons.Trash, "Delete Row", onClick = { vm.deleteTableRow(selectedRow) }, label = "-Row")
+                    }
+                    ToolbarSeparator()
+                    ToolbarButton(KernIcons.Plus, "Add Col Left", onClick = { vm.insertTableColumn(selectedCol) }, label = "+Col Left")
+                    ToolbarButton(KernIcons.Plus, "Add Col Right", onClick = { vm.insertTableColumn(selectedCol + 1) }, label = "+Col Right")
+                    if ((grid.firstOrNull()?.size ?: 0) > 1) {
+                        ToolbarButton(KernIcons.Trash, "Delete Col", onClick = { vm.deleteTableColumn(selectedCol) }, label = "-Col")
+                    }
+                }
+            }
+
+            // 2D Scrollable Matrix of Selectable Tiles
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(KernRadius.innerSmall))
+                    .background(colors.sunken)
+                    .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall))
+                    .verticalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                Column {
+                    grid.forEachIndexed { r, row ->
+                        Row {
+                            row.forEachIndexed { c, cell ->
+                                val isSelected = r == selectedRow && c == selectedCol
+                                Box(
+                                    modifier = Modifier
+                                        .width(110.dp)
+                                        .heightIn(min = 44.dp)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 0.5.dp,
+                                            color = if (isSelected) colors.accent else colors.borderSoft,
+                                        )
+                                        .background(if (isSelected) colors.accentSoft.copy(alpha = 0.35f) else colors.surface)
+                                        .clickable {
+                                            vm.activeSelectedRow = r
+                                            vm.activeSelectedCol = c
+                                        }
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.CenterStart,
+                                ) {
+                                    Text(
+                                        text = cell.ifBlank { "-" },
+                                        style = TextStyle(
+                                            fontFamily = OutfitFamily,
+                                            fontSize = 13.sp,
+                                            color = if (isSelected) colors.accent else if (cell.isBlank()) colors.textDim else colors.text,
+                                            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                                        ),
+                                        maxLines = 2,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Done Button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                ToolbarButton(
+                    icon = KernIcons.Check,
+                    contentDescription = "Save and Close",
+                    onClick = vm::saveTableEditor,
+                    label = "Done",
+                    active = true,
+                )
             }
         }
     }
