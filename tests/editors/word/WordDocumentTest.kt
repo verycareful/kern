@@ -111,7 +111,7 @@ class WordDocumentTest {
     }
 
     @Test
-    fun read_paragraphWithHyperlinkIsNotEditable() {
+    fun read_paragraphWithHyperlinkIsCapturedAndEditable() {
         val out = ByteArrayOutputStream()
         XWPFDocument().use { doc ->
             val p = doc.createParagraph()
@@ -122,7 +122,8 @@ class WordDocumentTest {
         val block = WordDocument.read(out.toByteArray()).blocks
             .filterIsInstance<WordDocument.ParagraphBlock>()
             .first()
-        assertFalse("hyperlink paragraph is read-only in this phase", block.editable)
+        assertTrue("hyperlink paragraph is editable in 0.1.10+", block.editable)
+        assertEquals("See example", block.text)
     }
 
     @Test
@@ -142,5 +143,42 @@ class WordDocumentTest {
         // reading must treat it as nullable rather than unbox it (would NPE on open).
         val paras = paragraphs(sampleRichDocx())
         assertNull(paras[1].runs.first().style.sizePt)
+    }
+
+    @Test
+    fun applyEdits_canApplyParagraphAlignmentAndKind() {
+        val edited = WordDocument.applyEditsAndSerialize(
+            sampleRichDocx(),
+            paraProps = mapOf(
+                1 to WordDocument.ParaPropsUpdate(
+                    kind = WordDocument.Kind.HEADING2,
+                    align = WordDocument.Align.CENTER,
+                    indentTwips = 720,
+                ),
+            ),
+        )
+        val paras = paragraphs(edited)
+        assertEquals(WordDocument.Kind.HEADING2, paras[1].props.kind)
+        assertEquals(WordDocument.Align.CENTER, paras[1].props.align)
+        assertEquals(720, paras[1].props.indentTwips)
+    }
+
+    @Test
+    fun applyEdits_canEditTableCellAndAddRow() {
+        val bytes = tableDocx()
+        val edited = WordDocument.applyEditsAndSerialize(
+            bytes,
+            tableEdits = mapOf(
+                1 to listOf(
+                    listOf("Updated Cell"),
+                    listOf("New Row Cell"),
+                ),
+            ),
+        )
+        val blocks = WordDocument.read(edited).blocks
+        val table = blocks.filterIsInstance<WordDocument.TableBlock>().first()
+        assertEquals(2, table.rows.size)
+        assertEquals("Updated Cell", table.rows[0][0])
+        assertEquals("New Row Cell", table.rows[1][0])
     }
 }

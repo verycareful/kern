@@ -2,6 +2,15 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.10.1] - 2026-08-28 13:35 IST
+
+### Tests
+- **Word Document Test Suite Expansion** (`WordDocumentTest.kt`): updated hyperlink coverage to verify captured editable text; added test cases for paragraph kind and alignment updates, left indentation twips persistence, and table cell editing with row additions
+
+### Results
+- 37 tests across 8 suites, all passed (18s, local Gradle `testDebugUnitTest`)
+- Visual inspection on device: verified rich-text formatting, paragraph styles, and table editing over USB debugging; identified that table edit controls overflow horizontally on compact viewports and are restricted to table ends, and large documents exhibit rendering latency (scheduled for a dedicated table editor modal and LazyColumn virtualization in 0.1.10.2)
+
 ## [0.1.10.0] - 2026-08-28 13:25 IST
 
 ### Added
