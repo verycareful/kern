@@ -282,18 +282,25 @@ private fun BoxScope.PdfToolsLayer(
     }
 }
 
-/** Dialog asking for a 1-based page range to extract into a new PDF. */
+/**
+ * Dialog asking for a single 1-based page range to extract into a new PDF.
+ *
+ * Only one produced file can be staged and saved, so the input is validated by
+ * [PdfEditorViewModel.rangeSpecError] before it is submitted: a list such as
+ * "1-3,5-7" is refused inline instead of quietly yielding pages 1-3 alone.
+ */
 @Composable
 private fun ExtractPagesDialog(onDismiss: () -> Unit, onExtract: (String) -> Unit) {
     val colors = KernTheme.colors
     var range by remember { mutableStateOf("") }
+    var rangeError by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
         title = { Text("Extract pages") },
         text = {
             Column {
-                Text("Page range (1-based), e.g. 1-3", style = KernType.body, color = colors.textMid)
+                Text("One page range (1-based), e.g. 1-3", style = KernType.body, color = colors.textMid)
                 Box(
                     modifier = Modifier
                         .padding(top = 8.dp)
@@ -307,7 +314,7 @@ private fun ExtractPagesDialog(onDismiss: () -> Unit, onExtract: (String) -> Uni
                     }
                     BasicTextField(
                         value = range,
-                        onValueChange = { range = it },
+                        onValueChange = { range = it; rangeError = null },
                         singleLine = true,
                         textStyle = TextStyle(
                             fontFamily = PlexMonoFamily,
@@ -318,10 +325,23 @@ private fun ExtractPagesDialog(onDismiss: () -> Unit, onExtract: (String) -> Uni
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                rangeError?.let { message ->
+                    Text(
+                        message,
+                        style = KernType.caption,
+                        color = colors.danger,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onExtract(range) }) { Text("Extract", color = colors.accent) }
+            TextButton(
+                onClick = {
+                    val problem = PdfEditorViewModel.rangeSpecError(range)
+                    if (problem != null) rangeError = problem else onExtract(range)
+                },
+            ) { Text("Extract", color = colors.accent) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textMid) }
