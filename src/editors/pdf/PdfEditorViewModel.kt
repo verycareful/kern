@@ -128,17 +128,50 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Extracts a single 1-based page range (e.g. "3-7") from the open PDF into a
      * new file, staged in [pendingOutput].
+     *
+     * The bridge also understands comma-separated lists and writes one file per
+     * range, but only one produced file can be staged and saved, so a list is
+     * refused by [rangeSpecError] instead of being silently truncated to its
+     * first range. Ranges are extracted one at a time.
      */
     fun extractPages(rangeSpec: String) {
         val source = uri ?: run { toolError = "No open PDF."; return }
-        val spec = rangeSpec.trim()
-        if (spec.isEmpty()) { toolError = "Enter a page range, e.g. 1-3."; return }
+        val spec = rangeSpec.filterNot { it.isWhitespace() }
+        rangeSpecError(spec)?.let { toolError = it; return }
         runTool {
             val dir = toolsCacheDir()
             val input = copyToCache(source, dir, "extract_src.pdf")
             val result = QyraPdf.splitRanges(input.absolutePath, spec, dir.absolutePath)
-            // splitRanges writes one file per range; for a single range we expose that file.
+            // splitRanges writes one file per range; spec is a single range, so this
+            // is the one file the user asked for.
             result to "extract.pdf"
+        }
+    }
+
+    companion object {
+        /** One 1-based page range: "4" or "2-7", after whitespace has been stripped. */
+        private val SINGLE_RANGE = Regex("""(\d{1,6})(?:-(\d{1,6}))?""")
+
+        /**
+         * Checks [spec] as a single 1-based page range, returning null when it is
+         * usable or a message explaining why it is not. Shared with the extract
+         * dialog so bad input is refused at the point of entry rather than costing
+         * the user a range further down the pipeline.
+         */
+        fun rangeSpecError(spec: String): String? {
+            val compact = spec.filterNot { it.isWhitespace() }
+            if (compact.isEmpty()) return "Enter a page range, e.g. 1-3."
+            if (compact.contains(',')) {
+                return "Extract handles one range at a time. Enter a single range like 1-3, " +
+                    "then run Extract again for the next one."
+            }
+            val match = SINGLE_RANGE.matchEntire(compact)
+                ?: return "Use one range like 1-3, or a single page number like 4."
+            val start = match.groupValues[1].toInt()
+            val end = match.groupValues[2].takeIf { it.isNotEmpty() }?.toInt() ?: start
+            if (start < 1) return "Page numbers start at 1."
+            if (end < start) return "The last page of the range cannot come before the first."
+            return null
         }
     }
 
@@ -170,9 +203,16 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
             }
             when (result) {
                 is QyraPdf.Result.Success -> {
-                    val first = result.outputPaths.firstOrNull()
-                    if (first == null) toolError = "The operation produced no output."
-                    else pendingOutput = PendingOutput(first, suggestedName)
+                    val paths = result.outputPaths
+                    // Only one produced file can be staged for saving, so keeping just
+                    // the first would discard the rest: say so rather than lose it.
+                    when {
+                        paths.isEmpty() -> toolError = "The operation produced no output."
+                        paths.size > 1 -> toolError =
+                            "That request produced ${paths.size} files, but only one can be " +
+                                "saved at a time. Narrow it to a single page range and try again."
+                        else -> pendingOutput = PendingOutput(paths[0], suggestedName)
+                    }
                 }
                 is QyraPdf.Result.Failure -> toolError = result.message
             }
