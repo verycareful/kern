@@ -247,7 +247,7 @@ private fun BoxScope.PdfToolsLayer(
         KernBottomSheet(onDismiss = { onSheetOpenChange(false) }, title = "PDF tools") {
             if (!vm.engineAvailable) {
                 Text(
-                    "Native engine (libqyra_lib.so) is not bundled in this build.",
+                    "Native engine (libkern_pdf.so) is not bundled in this build.",
                     style = KernType.caption,
                     color = colors.danger,
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 4.dp),
