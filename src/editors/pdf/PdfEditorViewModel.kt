@@ -149,14 +149,18 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 val written = runCatching { DocumentIo.writeBytes(ctx, target, File(output.cachePath).readBytes()) }
-                // The staged copy has served its purpose either way: the user has
-                // been given somewhere to put it, and it is unreachable from here on.
-                deleteToolFile(output.cachePath)
+                // Drop the staged copy only once it is safely written. If the save
+                // failed there is nowhere else for this data to exist, so keep it
+                // (and keep it staged) so the user can pick another destination.
+                if (written.isSuccess) deleteToolFile(output.cachePath)
                 written
             }
-            pendingOutput = null
-            if (result.isSuccess) toolMessage = "Saved"
-            else toolError = "Save failed: ${result.exceptionOrNull()?.message}"
+            if (result.isSuccess) {
+                pendingOutput = null
+                toolMessage = "Saved"
+            } else {
+                toolError = "Save failed: ${result.exceptionOrNull()?.message}"
+            }
         }
     }
 
