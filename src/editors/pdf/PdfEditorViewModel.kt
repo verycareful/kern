@@ -148,7 +148,11 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { DocumentIo.writeBytes(ctx, target, File(output.cachePath).readBytes()) }
+                val written = runCatching { DocumentIo.writeBytes(ctx, target, File(output.cachePath).readBytes()) }
+                // The staged copy has served its purpose either way: the user has
+                // been given somewhere to put it, and it is unreachable from here on.
+                deleteToolFile(output.cachePath)
+                written
             }
             pendingOutput = null
             if (result.isSuccess) toolMessage = "Saved"
@@ -156,7 +160,11 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun dismissPendingOutput() { pendingOutput = null }
+    fun dismissPendingOutput() {
+        val output = pendingOutput ?: return
+        pendingOutput = null
+        viewModelScope.launch { withContext(Dispatchers.IO) { deleteToolFile(output.cachePath) } }
+    }
     fun consumeToolMessage() { toolMessage = null }
     fun consumeToolError() { toolError = null }
 
@@ -164,9 +172,17 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun runTool(block: suspend () -> Pair<QyraPdf.Result, String>) {
         if (toolBusy) return
         toolBusy = true
+        val staged = listOfNotNull(pendingOutput?.cachePath)
         viewModelScope.launch {
             val (result, suggestedName) = withContext(Dispatchers.IO) {
-                runCatching { block() }.getOrElse { QyraPdf.Result.Failure(it.message ?: "Operation failed") to "" }
+                // Anything left over from an earlier operation is dead weight.
+                pruneToolsCache(staged)
+                val outcome = runCatching { block() }
+                    .getOrElse { QyraPdf.Result.Failure(it.message ?: "Operation failed") to "" }
+                // The copied inputs are only needed for the duration of the native
+                // call, and a failed call leaves nothing worth keeping at all.
+                pruneToolsCache(staged + (outcome.first as? QyraPdf.Result.Success)?.outputPaths.orEmpty())
+                outcome
             }
             when (result) {
                 is QyraPdf.Result.Success -> {
@@ -180,8 +196,33 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun toolsCacheDir(): File =
-        File(getApplication<Application>().cacheDir, "pdf-tools").apply { mkdirs() }
+    /**
+     * Scratch space for the native bridge. It holds plaintext copies of the user's
+     * documents, so it is treated as short-lived: see [pruneToolsCache].
+     */
+    private val toolsCacheRoot: File
+        get() = File(getApplication<Application>().cacheDir, "pdf-tools")
+
+    private fun toolsCacheDir(): File = toolsCacheRoot.apply { mkdirs() }
+
+    /**
+     * Deletes everything in the tool cache except [keepPaths]. Call it off the main
+     * thread; it never throws, because a failed cleanup must not fail an operation.
+     */
+    private fun pruneToolsCache(keepPaths: Collection<String> = emptyList()) {
+        runCatching {
+            val keep = keepPaths.mapNotNull { runCatching { File(it).canonicalPath }.getOrNull() }.toSet()
+            toolsCacheRoot.listFiles()?.forEach { file ->
+                val path = runCatching { file.canonicalPath }.getOrNull() ?: file.absolutePath
+                if (path !in keep) file.deleteRecursively()
+            }
+        }
+    }
+
+    /** Deletes one staged file. Call it off the main thread; it never throws. */
+    private fun deleteToolFile(path: String) {
+        runCatching { File(path).delete() }
+    }
 
     private fun copyToCache(src: Uri, dir: File, name: String): File {
         val ctx = getApplication<Application>()
@@ -195,5 +236,10 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         document?.close()
         document = null
+        // Backstop: leaving the editor must not leave copies of the user's
+        // documents behind. viewModelScope is cancelled by now, so this runs on a
+        // plain background thread rather than blocking the main one.
+        val root = toolsCacheRoot
+        Thread { runCatching { root.deleteRecursively() } }.start()
     }
 }
