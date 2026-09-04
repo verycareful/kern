@@ -1,0 +1,71 @@
+name: Release build check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-build:
+    name: Build release variant (R8 + shrink + proguard)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # No gradle-wrapper.jar is committed, so provision Gradle directly.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      # The native PDF bridge is deliberately not built here. R8 and resource
+      # shrinking operate on JVM bytecode and res/, never on jniLibs/*.so, so
+      # skipping the Rust cross-compile keeps this check fast without weakening
+      # what it validates. Android CI already builds the bridge for the debug APK.
+      #
+      # assembleRelease is the only task that runs R8: isMinifyEnabled +
+      # isShrinkResources + proguard-rules.pro. Apache POI and OpenCSV are
+      # reflection-heavy, so this is where their keep rules are actually proven.
+      # The APK produced here is unsigned (no signingConfig exists yet) and is
+      # never published - it exists only to show the release config builds.
+      - name: Build release APK (unsigned)
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      # Guards against the check silently becoming a no-op: without minification
+      # R8 emits no mapping.txt, so its absence means nothing was exercised.
+      - name: Verify R8 actually ran
+        run: |
+          if [ ! -f build/outputs/mapping/release/mapping.txt ]; then
+            echo "::error title=R8 did not run::build/outputs/mapping/release/mapping.txt is missing, so minify/shrink/proguard were not exercised by assembleRelease."
+            exit 1
+          fi
+          echo "R8 outputs:"
+          ls -l build/outputs/mapping/release/
+
+      # mapping.txt de-obfuscates release stack traces; usage.txt and seeds.txt
+      # record exactly what R8 stripped and kept, which is how POI/OpenCSV shrink
+      # breakage gets diagnosed. Uploaded on failure too, when they matter most.
+      - name: Upload R8 mapping and usage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kern-release-r8-reports
+          path: build/outputs/mapping/release/
+          if-no-files-found: warn
+          retention-days: 30
