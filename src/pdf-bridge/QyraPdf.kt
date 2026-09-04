@@ -10,7 +10,7 @@
  *   Bridges to Qyra (https://github.com/zParik/Qyra), licensed under the GNU
  *   General Public License v3.0 (GPL-3.0). GPL-3.0 code inside an AGPL-3.0
  *   project is license-compatible (upward). Any change to the Rust boundary
- *   (src-tauri/src/jni_api.rs in the Qyra fork) MUST be coordinated with the
+ *   (kern-bridge/src/lib.rs in the Qyra fork) MUST be coordinated with the
  *   Qyra maintainers (zParik) before merging.
  */
 package dev.kern.pdfbridge
@@ -20,7 +20,7 @@ import org.json.JSONObject
 /**
  * Kotlin side of the Qyra native PDF bridge. The `nativeXxx` declarations map
  * 1:1 to the `Java_dev_kern_pdfbridge_QyraPdf_*` exports in the Qyra fork's
- * `src-tauri/src/jni_api.rs`, compiled into `libqyra_lib.so`.
+ * `kern-bridge/src/lib.rs`, compiled into `libkern_pdf.so`.
  *
  * These ops are pure `lopdf` (no MuPDF, no ndk-context), so they operate on
  * plain filesystem paths: the caller copies the picked document(s) into the app
@@ -59,7 +59,7 @@ object QyraPdf {
         call { nativeMerge(sourcePaths.joinToString("\n"), outputPath) }
 
     private inline fun call(block: () -> String): Result {
-        if (!available) return Result.Failure("PDF engine (libqyra_lib.so) is not bundled in this build.")
+        if (!available) return Result.Failure("PDF engine (libkern_pdf.so) is not bundled in this build.")
         return runCatching { parse(block()) }
             .getOrElse { Result.Failure(it.message ?: "Native call failed") }
     }
@@ -76,7 +76,7 @@ object QyraPdf {
         return Result.Success(paths)
     }
 
-    // Native exports - see src-tauri/src/jni_api.rs in the Qyra fork.
+    // Native exports - see kern-bridge/src/lib.rs in the Qyra fork.
     private external fun nativeSplitPerPage(path: String, outDir: String): String
     private external fun nativeSplitRanges(path: String, rangesSpec: String, outDir: String): String
     private external fun nativeMerge(pathsJoined: String, output: String): String
