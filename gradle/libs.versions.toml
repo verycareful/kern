@@ -8,8 +8,12 @@ activityCompose = "1.9.3"
 composeBom = "2026.05.01"
 navigationCompose = "2.8.3"
 poi = "5.5.1"
-opencsv = "5.9"
-jsoup = "1.18.1"
+# Security floor. 5.12.0 carries commons-beanutils 1.11.0 (CVE-2025-48734) and
+# commons-lang3 3.18.0 (CVE-2025-48924); anything lower pulls both transitives
+# in at a vulnerable version.
+opencsv = "5.12.0"
+# jsoup does not backport security fixes, so this tracks the current release.
+jsoup = "1.23.2"
 # Test deps are wired here but live in the 0.1.0.1 (tests-only) release.
 junit = "4.13.2"
 androidxJunit = "1.2.1"
