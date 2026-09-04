@@ -208,9 +208,8 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
                     // the first would discard the rest: say so rather than lose it.
                     when {
                         paths.isEmpty() -> toolError = "The operation produced no output."
-                        paths.size > 1 -> toolError =
-                            "That request produced ${paths.size} files, but only one can be " +
-                                "saved at a time. Narrow it to a single page range and try again."
+paths.size > 1 -> toolError =
+    "That request produced ${paths.size} files, but only one can be saved at a time."
                         else -> pendingOutput = PendingOutput(paths[0], suggestedName)
                     }
                 }
