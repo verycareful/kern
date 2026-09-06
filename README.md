@@ -5,16 +5,23 @@
 # Kern
 
 <!-- Language & platform -->
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Java](https://img.shields.io/badge/Java-17-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Android](https://img.shields.io/badge/Android-8.0+-3DDC84?style=flat-square&logo=android&logoColor=white)](https://developer.android.com/)
 <!-- UI -->
-[![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Android-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202026.05.01-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Material 3](https://img.shields.io/badge/Material%203-757575?style=flat-square&logo=materialdesign&logoColor=white)](https://m3.material.io/)
+[![Navigation Compose](https://img.shields.io/badge/Navigation%20Compose-2.8.3-4285F4?style=flat-square&logo=android&logoColor=white)](https://developer.android.com/jetpack/compose/navigation)
 <!-- Build & libraries -->
-[![Gradle](https://img.shields.io/badge/Gradle-8.10-02303A?style=flat-square&logo=gradle&logoColor=white)](https://gradle.org/)
-[![Apache POI](https://img.shields.io/badge/Apache%20POI-5.3.0-D22128?style=flat-square&logo=apache&logoColor=white)](https://poi.apache.org/)
-[![OpenCSV](https://img.shields.io/badge/OpenCSV-5.9-08427B?style=flat-square)](https://opencsv.sourceforge.net/)
+[![Gradle](https://img.shields.io/badge/Gradle-8.10.2-02303A?style=flat-square&logo=gradle&logoColor=white)](https://gradle.org/)
+[![AGP](https://img.shields.io/badge/Android%20Gradle%20Plugin-8.7.2-3DDC84?style=flat-square&logo=android&logoColor=white)](https://developer.android.com/build/releases/gradle-plugin)
+[![Apache POI](https://img.shields.io/badge/Apache%20POI-5.5.1-D22128?style=flat-square&logo=apache&logoColor=white)](https://poi.apache.org/)
+[![OpenCSV](https://img.shields.io/badge/OpenCSV-5.12.0-08427B?style=flat-square)](https://opencsv.sourceforge.net/)
+[![jsoup](https://img.shields.io/badge/jsoup-1.23.2-1D9BF0?style=flat-square)](https://jsoup.org/)
+<!-- PDF engine -->
+<!-- Qyra and MuPDF have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
+[![Qyra](https://img.shields.io/badge/Qyra-JNI%2FNDK%20bridge-DEA584?style=flat-square&logo=rust&logoColor=white)](https://github.com/zParik/Qyra)
+[![MuPDF](https://img.shields.io/badge/MuPDF-PDF%20engine-C0392B?style=flat-square)](https://mupdf.com/)
 <!-- Project -->
 [![Version](https://img.shields.io/github/v/tag/verycareful/kern?style=flat-square&label=version&color=3F5B8B&sort=date)](https://github.com/verycareful/kern/tags)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-A42E2B?style=flat-square)](LICENSE)
@@ -91,6 +98,20 @@ See [docs/architecture.md](docs/architecture.md) for system design and [CONTRIBU
 
 ## License
 
-AGPL-3.0. See [LICENSE](LICENSE).
+Copyright © 2026 Sricharan Suresh (github.com/verycareful)
 
-PDF engine: MuPDF via [Qyra](https://github.com/zParik/Qyra) (GPL-3.0, compatible with AGPL-3.0).
+Kern is licensed under the **[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)**.
+You may use, study, modify and redistribute it freely. Any derivative work must
+also be released under AGPL-3.0, including its source. Unlike the plain GPL, the
+AGPL extends that obligation to network use: if you run a modified version and
+let others interact with it over a network, you must offer them the source of
+your modified version.
+
+Kern requests no network permissions, so the network clause is unlikely to bite
+in normal use. It applies to anyone who forks Kern and adds networking.
+
+See the [LICENSE](LICENSE) file for the full license text.
+
+**PDF engine:** MuPDF via the [Qyra](https://github.com/zParik/Qyra) Rust JNI/NDK
+bridge, licensed GPL-3.0. GPL-3.0 code inside an AGPL-3.0 project is compatible;
+both license headers must be present in the distributed build.
