@@ -181,15 +181,31 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { DocumentIo.writeBytes(ctx, target, File(output.cachePath).readBytes()) }
+                val written = runCatching {
+                    val source = resolveToolFile(output.cachePath)
+                        ?: throw java.io.IOException("Output is not in the tool cache")
+                    DocumentIo.writeBytes(ctx, target, source.readBytes())
+                }
+                // Drop the staged copy only once it is safely written. If the save
+                // failed there is nowhere else for this data to exist, so keep it
+                // (and keep it staged) so the user can pick another destination.
+                if (written.isSuccess) deleteToolFile(output.cachePath)
+                written
             }
-            pendingOutput = null
-            if (result.isSuccess) toolMessage = "Saved"
-            else toolError = "Save failed: ${result.exceptionOrNull()?.message}"
+            if (result.isSuccess) {
+                pendingOutput = null
+                toolMessage = "Saved"
+            } else {
+                toolError = "Save failed: ${result.exceptionOrNull()?.message}"
+            }
         }
     }
 
-    fun dismissPendingOutput() { pendingOutput = null }
+    fun dismissPendingOutput() {
+        val output = pendingOutput ?: return
+        pendingOutput = null
+        viewModelScope.launch { withContext(Dispatchers.IO) { deleteToolFile(output.cachePath) } }
+    }
     fun consumeToolMessage() { toolMessage = null }
     fun consumeToolError() { toolError = null }
 
@@ -197,9 +213,17 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun runTool(block: suspend () -> Pair<QyraPdf.Result, String>) {
         if (toolBusy) return
         toolBusy = true
+        val staged = listOfNotNull(pendingOutput?.cachePath)
         viewModelScope.launch {
             val (result, suggestedName) = withContext(Dispatchers.IO) {
-                runCatching { block() }.getOrElse { QyraPdf.Result.Failure(it.message ?: "Operation failed") to "" }
+                // Anything left over from an earlier operation is dead weight.
+                pruneToolsCache(staged)
+                val outcome = runCatching { block() }
+                    .getOrElse { QyraPdf.Result.Failure(it.message ?: "Operation failed") to "" }
+                // The copied inputs are only needed for the duration of the native
+                // call, and a failed call leaves nothing worth keeping at all.
+                pruneToolsCache(staged + (outcome.first as? QyraPdf.Result.Success)?.outputPaths.orEmpty())
+                outcome
             }
             when (result) {
                 is QyraPdf.Result.Success -> {
@@ -219,8 +243,49 @@ paths.size > 1 -> toolError =
         }
     }
 
-    private fun toolsCacheDir(): File =
-        File(getApplication<Application>().cacheDir, "pdf-tools").apply { mkdirs() }
+    /**
+     * Scratch space for the native bridge. It holds plaintext copies of the user's
+     * documents, so it is treated as short-lived: see [pruneToolsCache].
+     */
+    private val toolsCacheRoot: File
+        get() = File(getApplication<Application>().cacheDir, "pdf-tools")
+
+    private fun toolsCacheDir(): File = toolsCacheRoot.apply { mkdirs() }
+
+    /**
+     * Deletes everything in the tool cache except [keepPaths]. Call it off the main
+     * thread; it never throws, because a failed cleanup must not fail an operation.
+     */
+    private fun pruneToolsCache(keepPaths: Collection<String> = emptyList()) {
+        runCatching {
+            // Resolve keep-paths exactly as the listing below resolves candidates, so a
+            // path that fails canonicalisation still matches itself and survives.
+            val keep = keepPaths.map {
+                runCatching { File(it).canonicalPath }.getOrNull() ?: File(it).absolutePath
+            }.toSet()
+            toolsCacheRoot.listFiles()?.forEach { file ->
+                val path = runCatching { file.canonicalPath }.getOrNull() ?: file.absolutePath
+                if (path !in keep) file.deleteRecursively()
+            }
+        }
+    }
+
+    /**
+     * Resolves [path] to a canonical file inside [toolsCacheRoot], or null if it lands
+     * outside that directory, is the directory itself, or cannot be resolved. Tool
+     * paths arrive from the native bridge, so every read and delete goes through this
+     * to keep the reachable set to the scratch directory.
+     */
+    private fun resolveToolFile(path: String): File? = runCatching {
+        val root = toolsCacheRoot.canonicalFile
+        val file = File(path).canonicalFile
+        if (file != root && file.startsWith(root)) file else null
+    }.getOrNull()
+
+    /** Deletes one staged file. Call it off the main thread; it never throws. */
+    private fun deleteToolFile(path: String) {
+        runCatching { resolveToolFile(path)?.deleteRecursively() }
+    }
 
     private fun copyToCache(src: Uri, dir: File, name: String): File {
         val ctx = getApplication<Application>()
@@ -234,5 +299,10 @@ paths.size > 1 -> toolError =
     override fun onCleared() {
         document?.close()
         document = null
+        // Backstop: leaving the editor must not leave copies of the user's
+        // documents behind. viewModelScope is cancelled by now, so this runs on a
+        // plain background thread rather than blocking the main one.
+        val root = toolsCacheRoot
+        Thread({ runCatching { root.deleteRecursively() } }, "pdf-tools-cleanup").start()
     }
 }
