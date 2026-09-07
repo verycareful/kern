@@ -31,6 +31,25 @@ jobs:
       - name: Build PDF native bridge
         uses: ./.github/actions/build-pdf-bridge
 
+      # Kern has no release signingConfig yet, and an unsigned assembleRelease APK
+      # cannot be installed, so a debug build is still what gets published. Say so
+      # loudly instead of letting it pass silently. Do NOT fail the job: that would
+      # block releases outright. See issue #16 for the signing work that removes this.
+      - name: Warn that this release publishes a debug build
+        run: |
+          echo "::warning title=Publishing a debug build::${GITHUB_REF_NAME} ships a debug-signed, debuggable APK. Switching to a signed assembleRelease build needs a keystore in repo secrets - see issue #16."
+          {
+            echo "## Warning: this release publishes a debug build"
+            echo
+            echo "\`kern-${GITHUB_REF_NAME}-debug.apk\` comes from \`assembleDebug\`:"
+            echo
+            echo "- signed with Android's auto-generated debug keystore, not a stable release key"
+            echo "- \`debuggable=true\`"
+            echo "- not minified or resource-shrunk (the \`release\` build type is validated by the Release build check workflow, but cannot be published unsigned)"
+            echo
+            echo "Publishing a signed \`assembleRelease\` build requires a keystore plus passwords in repository secrets and a \`signingConfig\` in \`build.gradle.kts\`. Tracked in issue #16."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
@@ -45,4 +64,18 @@ jobs:
           name: Kern ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          # Prepended to the auto-generated notes, so anyone downloading the asset
+          # sees what they are installing before they install it.
+          body: |
+            **Note: this asset is a debug build.**
+
+            `kern-${{ github.ref_name }}-debug.apk` is produced by `assembleDebug`. It is signed with
+            Android's auto-generated debug keystore and is marked `debuggable`. Kern does not have a
+            release signing key yet, and an unsigned release build cannot be installed at all, so the
+            debug build is what ships for now.
+
+            What that means in practice: the signing identity is not stable between builds, so
+            installing this over an existing copy of Kern may fail with a signature mismatch
+            (uninstall the old copy first), and a debuggable build lets any process with adb access
+            attach to the app. Tracked in #16.
           files: dist/kern-${{ github.ref_name }}-debug.apk

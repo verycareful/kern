@@ -48,3 +48,72 @@ jobs:
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # No gradle-wrapper.jar is committed, so provision Gradle directly.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      # tests/editors and tests/shared are plain JVM tests, so the native PDF
+      # bridge is deliberately not built here - it would only slow the job down.
+      - name: Run JVM unit tests
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Upload unit test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kern-unit-test-report
+          path: |
+            build/reports/tests/testDebugUnitTest
+            build/test-results/testDebugUnitTest
+          if-no-files-found: warn
+          retention-days: 14
+
+  lint:
+    name: Android Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # No gradle-wrapper.jar is committed, so provision Gradle directly.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      # Applies config/lint.xml, which treats any network API use as an error.
+      - name: Run Android Lint
+        run: gradle lintDebug --no-daemon --stacktrace
+
+      - name: Upload lint report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kern-lint-report
+          path: |
+            build/reports/lint-results-debug.html
+            build/reports/lint-results-debug.xml
+          if-no-files-found: warn
+          retention-days: 14
