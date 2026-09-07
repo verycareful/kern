@@ -181,7 +181,11 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                val written = runCatching { DocumentIo.writeBytes(ctx, target, File(output.cachePath).readBytes()) }
+                val written = runCatching {
+                    val source = resolveToolFile(output.cachePath)
+                        ?: throw java.io.IOException("Output is not in the tool cache")
+                    DocumentIo.writeBytes(ctx, target, source.readBytes())
+                }
                 // Drop the staged copy only once it is safely written. If the save
                 // failed there is nowhere else for this data to exist, so keep it
                 // (and keep it staged) so the user can pick another destination.
@@ -267,16 +271,20 @@ paths.size > 1 -> toolError =
     }
 
     /**
-     * Deletes one staged file, and only if it resolves inside [toolsCacheRoot]. The
-     * path originates in the native bridge, so the containment check bounds what this
-     * can reach to the scratch directory. Call it off the main thread; it never throws.
+     * Resolves [path] to a canonical file inside [toolsCacheRoot], or null if it lands
+     * outside that directory, is the directory itself, or cannot be resolved. Tool
+     * paths arrive from the native bridge, so every read and delete goes through this
+     * to keep the reachable set to the scratch directory.
      */
+    private fun resolveToolFile(path: String): File? = runCatching {
+        val root = toolsCacheRoot.canonicalFile
+        val file = File(path).canonicalFile
+        if (file != root && file.startsWith(root)) file else null
+    }.getOrNull()
+
+    /** Deletes one staged file. Call it off the main thread; it never throws. */
     private fun deleteToolFile(path: String) {
-        runCatching {
-            val root = toolsCacheRoot.canonicalFile
-            val file = File(path).canonicalFile
-            if (file != root && file.startsWith(root)) file.deleteRecursively()
-        }
+        runCatching { resolveToolFile(path)?.deleteRecursively() }
     }
 
     private fun copyToCache(src: Uri, dir: File, name: String): File {
