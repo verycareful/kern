@@ -254,7 +254,11 @@ paths.size > 1 -> toolError =
      */
     private fun pruneToolsCache(keepPaths: Collection<String> = emptyList()) {
         runCatching {
-            val keep = keepPaths.mapNotNull { runCatching { File(it).canonicalPath }.getOrNull() }.toSet()
+            // Resolve keep-paths exactly as the listing below resolves candidates, so a
+            // path that fails canonicalisation still matches itself and survives.
+            val keep = keepPaths.map {
+                runCatching { File(it).canonicalPath }.getOrNull() ?: File(it).absolutePath
+            }.toSet()
             toolsCacheRoot.listFiles()?.forEach { file ->
                 val path = runCatching { file.canonicalPath }.getOrNull() ?: file.absolutePath
                 if (path !in keep) file.deleteRecursively()
@@ -262,9 +266,17 @@ paths.size > 1 -> toolError =
         }
     }
 
-    /** Deletes one staged file. Call it off the main thread; it never throws. */
+    /**
+     * Deletes one staged file, and only if it resolves inside [toolsCacheRoot]. The
+     * path originates in the native bridge, so the containment check bounds what this
+     * can reach to the scratch directory. Call it off the main thread; it never throws.
+     */
     private fun deleteToolFile(path: String) {
-        runCatching { File(path).delete() }
+        runCatching {
+            val root = toolsCacheRoot.canonicalFile
+            val file = File(path).canonicalFile
+            if (file != root && file.startsWith(root)) file.deleteRecursively()
+        }
     }
 
     private fun copyToCache(src: Uri, dir: File, name: String): File {
@@ -283,6 +295,6 @@ paths.size > 1 -> toolError =
         // documents behind. viewModelScope is cancelled by now, so this runs on a
         // plain background thread rather than blocking the main one.
         val root = toolsCacheRoot
-        Thread { runCatching { root.deleteRecursively() } }.start()
+        Thread({ runCatching { root.deleteRecursively() } }, "pdf-tools-cleanup").start()
     }
 }
