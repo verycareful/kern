@@ -3,18 +3,24 @@ package dev.kern.editors.pptx
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +33,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -40,6 +49,7 @@ import dev.kern.shared.theme.KernType
 import dev.kern.shared.theme.OutfitFamily
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
+import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.KernIcons
 import dev.kern.shared.ui.ToolbarButton
@@ -52,16 +62,24 @@ private const val PPTX_MIME = "application/vnd.openxmlformats-officedocument.pre
 
 // Slide canvas: 16:9, matching the design's slide aspect ratio.
 private const val SLIDE_ASPECT = 16f / 9f
-// Dark-slide background (white in light theme), per the design handoff.
+// Dark-slide background (white in light theme).
 private val SlideDarkBackground = Color(0xFF1A1C22)
-// Body text size on the slide canvas (scaled by zoom).
 private val SlideTextSize = 16.sp
 
-// Thumbnail rail tile dimensions (design: ~92x52).
+// Thumbnail rail tile dimensions (~92x52).
 private val ThumbWidth = 92.dp
 private val ThumbHeight = 52.dp
 private val ThumbBorderWidth = 2.dp
 private val PageIndicatorMinWidth = 56.dp
+
+private val PptFontSizes = listOf(12f, 14f, 16f, 18f, 20f, 24f, 28f, 32f, 36f, 40f, 44f, 48f, 54f, 60f, 72f)
+
+private val PaletteColors = listOf(
+    "#000000", "#FFFFFF", "#E53935", "#D81B60",
+    "#8E24AA", "#5E35B1", "#3949AB", "#1E88E5",
+    "#00ACC1", "#00897B", "#43A047", "#7CB342",
+    "#FDD835", "#FB8C00", "#F4511E", "#6D4C41",
+)
 
 @Composable
 fun PptEditorScreen(
@@ -81,26 +99,121 @@ fun PptEditorScreen(
         exportMimeType = PPTX_MIME,
         exportFileName = vm.fileName.ifBlank { "export.pptx" },
         onExportToUri = vm::exportTo,
-        toolbar = { PptToolbar() },
+        toolbar = { PptToolbar(vm) },
     ) { modifier ->
         SlideEditor(vm, hue, modifier)
     }
+
+    if (vm.showLayoutPicker) {
+        LayoutPickerSheet(
+            onSelect = vm::addSlide,
+            onDismiss = { vm.showLayoutPicker = false },
+        )
+    }
+
+    if (vm.showSlideActions) {
+        SlideActionSheet(
+            slideIndex = vm.actionSlideIndex,
+            totalSlides = vm.slideCount,
+            onDuplicate = { vm.duplicateSlide(vm.actionSlideIndex) },
+            onDelete = { vm.deleteSlide(vm.actionSlideIndex) },
+            onMoveLeft = { vm.moveSlide(vm.actionSlideIndex, vm.actionSlideIndex - 1) },
+            onMoveRight = { vm.moveSlide(vm.actionSlideIndex, vm.actionSlideIndex + 1) },
+            onDismiss = { vm.showSlideActions = false },
+        )
+    }
+
+    if (vm.showFontSizeSheet) {
+        PptSizePicker(
+            current = vm.caretStyle.sizePt,
+            onPick = {
+                if (it != null) vm.setFontSize(it)
+                vm.showFontSizeSheet = false
+            },
+            onDismiss = { vm.showFontSizeSheet = false },
+        )
+    }
+
+    if (vm.showColorSheet) {
+        PptColorPicker(
+            currentColorHex = vm.caretStyle.colorHex ?: "#FFFFFF",
+            onPick = {
+                vm.setColor(it)
+                vm.showColorSheet = false
+            },
+            onDismiss = { vm.showColorSheet = false },
+        )
+    }
 }
 
-/**
- * Slide toolbar. Adding slides/text, changing layout, and run styling (bold/italic)
- * are future functional work on the presentation model; the buttons match the design
- * and stay disabled until the ViewModel exposes those capabilities.
- */
 @Composable
-private fun PptToolbar() {
+private fun PptToolbar(vm: PptEditorViewModel) {
+    val caret = vm.caretStyle
+    val hasSelection = vm.selectedShapeIndex != null
+    val sizeLabel = caret.sizePt?.let { "${it.roundToInt()}" } ?: "Size"
+
     EditorToolbar {
-        ToolbarButton(KernIcons.Plus, "Add slide", onClick = {}, label = "Slide", enabled = false)
-        ToolbarButton(KernIcons.Text, "Add text", onClick = {}, label = "Text", enabled = false)
-        ToolbarButton(KernIcons.Slides, "Layout", onClick = {}, label = "Layout", enabled = false)
+        ToolbarButton(
+            icon = KernIcons.Undo,
+            contentDescription = "Undo",
+            onClick = vm::undo,
+            enabled = vm.canUndo,
+        )
+        ToolbarButton(
+            icon = KernIcons.Redo,
+            contentDescription = "Redo",
+            onClick = vm::redo,
+            enabled = vm.canRedo,
+        )
         ToolbarSeparator()
-        ToolbarButton(KernIcons.Bold, "Bold", onClick = {}, enabled = false)
-        ToolbarButton(KernIcons.Italic, "Italic", onClick = {}, enabled = false)
+        ToolbarButton(
+            icon = KernIcons.Plus,
+            contentDescription = "Add slide",
+            onClick = { vm.showLayoutPicker = true },
+            label = "Slide",
+        )
+        ToolbarButton(
+            icon = KernIcons.Text,
+            contentDescription = "Add text",
+            onClick = vm::addTextBox,
+            label = "Text",
+        )
+        ToolbarSeparator()
+        ToolbarButton(
+            icon = KernIcons.Bold,
+            contentDescription = "Bold",
+            onClick = vm::toggleBold,
+            active = caret.bold,
+            enabled = hasSelection,
+        )
+        ToolbarButton(
+            icon = KernIcons.Italic,
+            contentDescription = "Italic",
+            onClick = vm::toggleItalic,
+            active = caret.italic,
+            enabled = hasSelection,
+        )
+        ToolbarButton(
+            icon = KernIcons.Underline,
+            contentDescription = "Underline",
+            onClick = vm::toggleUnderline,
+            active = caret.underline,
+            enabled = hasSelection,
+        )
+        ToolbarButton(
+            icon = KernIcons.FontSize,
+            contentDescription = "Font size",
+            onClick = { vm.showFontSizeSheet = true },
+            label = sizeLabel,
+            enabled = hasSelection,
+        )
+        ToolbarButton(
+            icon = KernIcons.FontColor,
+            contentDescription = "Font color",
+            onClick = { vm.showColorSheet = true },
+            active = caret.colorHex != null,
+            enabled = hasSelection,
+        )
     }
 }
 
@@ -110,11 +223,14 @@ private fun SlideEditor(vm: PptEditorViewModel, hue: Color, modifier: Modifier) 
     val zoom = rememberZoomState()
     Box(modifier.background(colors.sunken)) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize(),
         ) {
-            SlideCanvas(vm, zoom.scale, Modifier.pinchZoom(zoom))
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                SlideCanvas(vm, zoom.scale, Modifier.pinchZoom(zoom))
+            }
             PageIndicator(vm)
             ThumbnailRail(vm)
         }
@@ -124,47 +240,79 @@ private fun SlideEditor(vm: PptEditorViewModel, hue: Color, modifier: Modifier) 
     }
 }
 
-/** The centered 16:9 slide canvas with directly editable text shapes. */
+/** The centered 16:9 slide canvas with selectable and editable text shapes. */
 @Composable
 private fun SlideCanvas(vm: PptEditorViewModel, scale: Float, modifier: Modifier) {
     val colors = KernTheme.colors
-    val slideBackground = if (colors.dark) SlideDarkBackground else Color.White
-    // The slide background mirrors the theme (white in light, dark in dark), so the
-    // primary text token already contrasts correctly on the slide in both themes.
+    val slideState = vm.currentSlideState
+    val slideWidth = slideState?.width ?: 960f
+    val slideHeight = slideState?.height ?: 540f
+    val slideAspect = if (slideHeight > 0) slideWidth / slideHeight else SLIDE_ASPECT
+    val bgHex = slideState?.backgroundColorHex
+    val slideBackground = bgHex?.let { parseHex(it) } ?: if (colors.dark) SlideDarkBackground else Color.White
     val slideText = colors.text
-    Box(modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
-        Column(
+
+    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
+        val containerWidth = maxWidth.value
+        val drawScale = containerWidth / slideWidth
+        val finalScale = drawScale * scale
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(SLIDE_ASPECT)
+                .aspectRatio(slideAspect)
                 .shadow(8.dp, RoundedCornerShape(KernRadius.base))
                 .clip(RoundedCornerShape(KernRadius.base))
                 .background(slideBackground)
                 .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.base))
-                .verticalScroll(rememberScrollState())
-                .padding(28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .graphicsLayer {
+                    scaleX = finalScale
+                    scaleY = finalScale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
         ) {
-            val texts = vm.currentTexts
-            if (texts.isEmpty()) {
+            val shapes = vm.currentShapes
+            if (shapes.isEmpty()) {
                 Text(
-                    text = "No editable text on this slide.",
-                    style = KernType.body.copy(fontSize = SlideTextSize * scale),
+                    text = "Blank slide. Tap 'Text' to add a text box.",
+                    style = KernType.body.copy(fontSize = SlideTextSize),
                     color = slideText.copy(alpha = 0.5f),
+                    modifier = Modifier.align(Alignment.Center)
                 )
             } else {
-                texts.forEachIndexed { i, t ->
-                    BasicTextField(
-                        value = t,
-                        onValueChange = { vm.editText(i, it) },
-                        textStyle = TextStyle(
-                            fontFamily = OutfitFamily,
-                            fontSize = SlideTextSize * scale,
-                            color = slideText,
-                        ),
-                        cursorBrush = SolidColor(colors.accent),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                shapes.forEachIndexed { i, shapeState ->
+                    val isSelected = vm.selectedShapeIndex == i
+                    val bounds = shapeState.bounds ?: PptDocument.ShapeBounds(50f, 50f, 300f, 50f)
+                    
+                    Box(
+                        modifier = Modifier
+                            .offset(x = bounds.x.dp, y = bounds.y.dp)
+                            .size(width = bounds.width.dp, height = bounds.height.dp)
+                            .clip(RoundedCornerShape(KernRadius.innerSmall))
+                            .background(if (isSelected) colors.accentSoft.copy(alpha = 0.25f) else Color.Transparent)
+                            .border(
+                                width = if (isSelected) (1.5f / finalScale).dp else 0.5.dp,
+                                color = if (isSelected) colors.accent else Color.Transparent,
+                                shape = RoundedCornerShape(KernRadius.innerSmall),
+                            )
+                            .clickable { vm.selectShape(i) }
+                            .padding(4.dp),
+                    ) {
+                        BasicTextField(
+                            value = shapeState.textValue,
+                            onValueChange = {
+                                vm.selectShape(i)
+                                vm.updateShapeValue(i, it)
+                            },
+                            textStyle = TextStyle(
+                                fontFamily = OutfitFamily,
+                                fontSize = SlideTextSize,
+                                color = slideText,
+                            ),
+                            cursorBrush = SolidColor(colors.accent),
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
         }
@@ -202,19 +350,18 @@ private fun PageIndicator(vm: PptEditorViewModel) {
     }
 }
 
-/** Horizontally scrollable rail of numbered slide tiles; tapping jumps to a slide. */
+/** Horizontally scrollable rail of numbered slide tiles; tapping jumps to a slide, long-press opens actions. */
 @Composable
 private fun ThumbnailRail(vm: PptEditorViewModel) {
     val colors = KernTheme.colors
-    Row(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.surface)
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        for (i in 0 until vm.slideCount) {
+        items(vm.slideCount) { i ->
             val selected = i == vm.currentSlide
             Box(
                 modifier = Modifier
@@ -226,7 +373,15 @@ private fun ThumbnailRail(vm: PptEditorViewModel) {
                         if (selected) colors.accent else colors.borderSoft,
                         RoundedCornerShape(KernRadius.badge),
                     )
-                    .clickable { vm.goToSlide(i) },
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { vm.goToSlide(i) },
+                            onLongPress = {
+                                vm.actionSlideIndex = i
+                                vm.showSlideActions = true
+                            },
+                        )
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -239,7 +394,186 @@ private fun ThumbnailRail(vm: PptEditorViewModel) {
     }
 }
 
-/** Small zoom-percentage badge shown while zoomed. */
+/** Bottom sheet with preset slide layouts for adding new slides. */
+@Composable
+private fun LayoutPickerSheet(
+    onSelect: (PptDocument.PresetLayout) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    KernBottomSheet(
+        onDismiss = onDismiss,
+        title = "Choose Slide Layout",
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val layouts = listOf(
+                PptDocument.PresetLayout.TITLE to "Title Slide",
+                PptDocument.PresetLayout.TITLE_AND_CONTENT to "Title & Content",
+                PptDocument.PresetLayout.SECTION_HEADER to "Section Header",
+                PptDocument.PresetLayout.BLANK to "Blank",
+            )
+            for ((layout, title) in layouts) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(KernRadius.innerSmall))
+                        .background(colors.sunken)
+                        .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall))
+                        .clickable { onSelect(layout) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(title, style = KernType.body, color = colors.text)
+                    Text("+", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold), color = colors.accent)
+                }
+            }
+        }
+    }
+}
+
+/** Bottom sheet with contextual operations for an individual slide. */
+@Composable
+private fun SlideActionSheet(
+    slideIndex: Int,
+    totalSlides: Int,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveLeft: () -> Unit,
+    onMoveRight: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    KernBottomSheet(
+        onDismiss = onDismiss,
+        title = "Slide ${slideIndex + 1} Actions",
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ActionRow("Duplicate Slide", onClick = onDuplicate)
+            if (slideIndex > 0) {
+                ActionRow("Move Left", onClick = onMoveLeft)
+            }
+            if (slideIndex < totalSlides - 1) {
+                ActionRow("Move Right", onClick = onMoveRight)
+            }
+            if (totalSlides > 1) {
+                ActionRow("Delete Slide", isDestructive = true, onClick = onDelete)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(
+    title: String,
+    isDestructive: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(KernRadius.innerSmall))
+            .background(colors.sunken)
+            .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = KernType.body,
+            color = if (isDestructive) colors.danger else colors.text,
+            fontWeight = if (isDestructive) FontWeight.SemiBold else FontWeight.Normal,
+        )
+    }
+}
+
+@Composable
+private fun PptSizePicker(
+    current: Float?,
+    onPick: (Float?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    KernBottomSheet(onDismiss = onDismiss, title = "Font Size") {
+        Column(Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
+            PptFontSizes.forEach { pt ->
+                val selected = current == pt
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(pt) }
+                        .background(if (selected) colors.accentSoft else Color.Transparent)
+                        .padding(horizontal = 22.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("${pt.roundToInt()} pt", style = KernType.body, color = if (selected) colors.accent else colors.text)
+                    if (selected) Text("✓", style = KernType.body, color = colors.accent)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PptColorPicker(
+    currentColorHex: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    KernBottomSheet(onDismiss = onDismiss, title = "Font Color") {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(bottom = 20.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                PaletteColors.forEach { hex ->
+                    val color = parseHex(hex)
+                    val isSelected = currentColorHex.equals(hex, ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .border(
+                                width = if (isSelected) 2.5.dp else 1.dp,
+                                color = if (isSelected) colors.accent else colors.borderSoft,
+                                shape = CircleShape,
+                            )
+                            .clickable { onPick(hex) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun parseHex(hex: String): Color {
+    val clean = hex.removePrefix("#")
+    val parsed = clean.toLongOrNull(16) ?: 0xFFFFFFFF
+    return if (clean.length <= 6) Color(0xFF000000 or parsed) else Color(parsed)
+}
+
 @Composable
 private fun ZoomBadge(scale: Float, hue: Color, modifier: Modifier) {
     val colors = KernTheme.colors
