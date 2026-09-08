@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,17 +22,48 @@ import kotlinx.coroutines.withContext
  */
 class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
 
-    data class ShapeState(
-        var textValue: TextFieldValue,
-        var bounds: PptDocument.ShapeBounds? = null,
-    )
+    /**
+     * One text shape on a slide.
+     *
+     * Every field is Compose state, and that is load-bearing rather than tidiness:
+     * the canvas renders each shape through a `BasicTextField`, which is a controlled
+     * component. A write that Compose is never told about leaves the field rendering
+     * its previous value, so the keystroke is discarded and the shape cannot be typed
+     * into at all.
+     */
+    class ShapeState(
+        textValue: TextFieldValue,
+        bounds: PptDocument.ShapeBounds? = null,
+    ) {
+        var textValue by mutableStateOf(textValue)
+        var bounds by mutableStateOf(bounds)
 
-    data class SlideState(
-        val shapes: MutableList<ShapeState> = mutableListOf(),
-        var width: Float = 960f,
-        var height: Float = 540f,
-        var backgroundColorHex: String? = null,
-    )
+        fun copy(
+            textValue: TextFieldValue = this.textValue,
+            bounds: PptDocument.ShapeBounds? = this.bounds,
+        ) = ShapeState(textValue, bounds)
+    }
+
+    class SlideState(
+        shapes: List<ShapeState> = emptyList(),
+        width: Float = 960f,
+        height: Float = 540f,
+        backgroundColorHex: String? = null,
+    ) {
+        /** A snapshot list, so adding or deleting a text box recomposes the canvas. */
+        val shapes: SnapshotStateList<ShapeState> =
+            mutableStateListOf<ShapeState>().apply { addAll(shapes) }
+        var width by mutableStateOf(width)
+        var height by mutableStateOf(height)
+        var backgroundColorHex by mutableStateOf(backgroundColorHex)
+
+        fun copy(
+            shapes: List<ShapeState> = this.shapes,
+            width: Float = this.width,
+            height: Float = this.height,
+            backgroundColorHex: String? = this.backgroundColorHex,
+        ) = SlideState(shapes, width, height, backgroundColorHex)
+    }
 
     data class HistorySnapshot(
         val slides: List<SlideState>,
@@ -172,7 +204,14 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
             PptDocument.PresetLayout.BLANK -> mutableListOf()
         }
         val insertAt = currentSlide + 1
-        slideStates.add(insertAt, SlideState(newShapes))
+        // A deck has one slide size. Taking it from the neighbour keeps a new slide the
+        // same shape as the rest, rather than the 16:9 default in a 4:3 presentation.
+        val existing = currentSlideState
+        slideStates.add(
+            insertAt,
+            if (existing == null) SlideState(newShapes)
+            else SlideState(newShapes, existing.width, existing.height),
+        )
         slideOps.add(PptDocument.InsertSlide(insertAt, layout))
         currentSlide = insertAt
         selectedShapeIndex = if (newShapes.isNotEmpty()) 0 else null

@@ -10,11 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.size
@@ -27,12 +27,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,17 +56,28 @@ import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.KernIcons
 import dev.kern.shared.ui.ToolbarButton
 import dev.kern.shared.ui.ToolbarSeparator
-import dev.kern.shared.ui.pinchZoom
-import dev.kern.shared.ui.rememberZoomState
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private const val PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
-// Slide canvas: 16:9, matching the design's slide aspect ratio.
-private const val SLIDE_ASPECT = 16f / 9f
+// Slide coordinate space used when a deck declares no size of its own, in points.
+private const val DefaultSlideWidth = 960f
+private const val DefaultSlideHeight = 540f
 // Dark-slide background (white in light theme).
 private val SlideDarkBackground = Color(0xFF1A1C22)
 private val SlideTextSize = 16.sp
+private val SlideElevation = 8.dp
+private val SlideCanvasPadding = 16.dp
+// Selection outline weight in slide units; divided by the canvas scale when drawn.
+private const val SelectedOutlineWidth = 1.5f
+
+// Where a shape goes when the file declares no geometry for it, in slide points.
+private const val FallbackShapeInset = 50f
+private const val FallbackShapeStep = 60f
+private const val FallbackShapeWidth = 300f
+private const val FallbackShapeHeight = 50f
 
 // Thumbnail rail tile dimensions (~92x52).
 private val ThumbWidth = 92.dp
@@ -220,102 +233,146 @@ private fun PptToolbar(vm: PptEditorViewModel) {
 @Composable
 private fun SlideEditor(vm: PptEditorViewModel, hue: Color, modifier: Modifier) {
     val colors = KernTheme.colors
-    val zoom = rememberZoomState()
+    val viewport = remember { SlideViewport() }
     Box(modifier.background(colors.sunken)) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                SlideCanvas(vm, zoom.scale, Modifier.pinchZoom(zoom))
-            }
+        Column(modifier = Modifier.fillMaxSize()) {
+            SlideCanvas(vm, viewport, Modifier.weight(1f).fillMaxWidth())
             PageIndicator(vm)
             ThumbnailRail(vm)
         }
-        if (zoom.scale != 1f) {
-            ZoomBadge(zoom.scale, hue, Modifier.align(Alignment.TopEnd))
+        if (viewport.isTransformed) {
+            ZoomBadge(viewport.zoom, hue, Modifier.align(Alignment.TopEnd))
         }
     }
 }
 
-/** The centered 16:9 slide canvas with selectable and editable text shapes. */
+/**
+ * The slide canvas.
+ *
+ * The inner box is laid out at the slide's own coordinate size in dp, and that whole box
+ * is then scaled to fit the available area. This is what lets a shape sit at its authored
+ * position: its offset is expressed in the same units the file stores. Sizing the box to
+ * the viewport and scaling separately would leave shapes and slide chrome in two
+ * different coordinate spaces, at two different sizes.
+ */
 @Composable
-private fun SlideCanvas(vm: PptEditorViewModel, scale: Float, modifier: Modifier) {
+private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifier: Modifier) {
     val colors = KernTheme.colors
+    val density = LocalDensity.current
     val slideState = vm.currentSlideState
-    val slideWidth = slideState?.width ?: 960f
-    val slideHeight = slideState?.height ?: 540f
-    val slideAspect = if (slideHeight > 0) slideWidth / slideHeight else SLIDE_ASPECT
-    val bgHex = slideState?.backgroundColorHex
-    val slideBackground = bgHex?.let { parseHex(it) } ?: if (colors.dark) SlideDarkBackground else Color.White
-    val slideText = colors.text
+    val slideW = slideState?.width?.takeIf { it > 0f } ?: DefaultSlideWidth
+    val slideH = slideState?.height?.takeIf { it > 0f } ?: DefaultSlideHeight
+    val slideBackground = slideState?.backgroundColorHex?.let { parseHex(it) }
+        ?: if (colors.dark) SlideDarkBackground else Color.White
+    val shape = RoundedCornerShape(KernRadius.base)
 
-    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
-        val containerWidth = maxWidth.value
-        val drawScale = containerWidth / slideWidth
-        val finalScale = drawScale * scale
+    BoxWithConstraints(modifier.padding(SlideCanvasPadding)) {
+        val viewSize = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
+        val naturalSize = with(density) { Size(slideW.dp.toPx(), slideH.dp.toPx()) }
+        // Fit on both axes, so a slide uses the whole area rather than only its width.
+        val fit = min(viewSize.width / naturalSize.width, viewSize.height / naturalSize.height)
+        val fittedSize = Size(naturalSize.width * fit, naturalSize.height * fit)
+        val scale = fit * viewport.zoom
+
+        // A rotation or a slide of a different size changes what can be panned to.
+        LaunchedEffect(viewSize, fittedSize) { viewport.clamp(viewSize, fittedSize) }
 
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(slideAspect)
-                .shadow(8.dp, RoundedCornerShape(KernRadius.base))
-                .clip(RoundedCornerShape(KernRadius.base))
-                .background(slideBackground)
-                .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.base))
-                .graphicsLayer {
-                    scaleX = finalScale
-                    scaleY = finalScale
-                    transformOrigin = TransformOrigin(0f, 0f)
-                }
+                .fillMaxSize()
+                .slideTransform(viewport, { viewSize }, { fittedSize }),
+            contentAlignment = Alignment.Center,
         ) {
-            val shapes = vm.currentShapes
-            if (shapes.isEmpty()) {
-                Text(
-                    text = "Blank slide. Tap 'Text' to add a text box.",
-                    style = KernType.body.copy(fontSize = SlideTextSize),
-                    color = slideText.copy(alpha = 0.5f),
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            } else {
-                shapes.forEachIndexed { i, shapeState ->
-                    val isSelected = vm.selectedShapeIndex == i
-                    val bounds = shapeState.bounds ?: PptDocument.ShapeBounds(50f, 50f, 300f, 50f)
-                    
-                    Box(
-                        modifier = Modifier
-                            .offset(x = bounds.x.dp, y = bounds.y.dp)
-                            .size(width = bounds.width.dp, height = bounds.height.dp)
-                            .clip(RoundedCornerShape(KernRadius.innerSmall))
-                            .background(if (isSelected) colors.accentSoft.copy(alpha = 0.25f) else Color.Transparent)
-                            .border(
-                                width = if (isSelected) (1.5f / finalScale).dp else 0.5.dp,
-                                color = if (isSelected) colors.accent else Color.Transparent,
-                                shape = RoundedCornerShape(KernRadius.innerSmall),
-                            )
-                            .clickable { vm.selectShape(i) }
-                            .padding(4.dp),
-                    ) {
-                        BasicTextField(
-                            value = shapeState.textValue,
-                            onValueChange = {
-                                vm.selectShape(i)
-                                vm.updateShapeValue(i, it)
-                            },
-                            textStyle = TextStyle(
-                                fontFamily = OutfitFamily,
-                                fontSize = SlideTextSize,
-                                color = slideText,
-                            ),
-                            cursorBrush = SolidColor(colors.accent),
-                            modifier = Modifier.fillMaxSize(),
-                        )
+            Box(
+                modifier = Modifier
+                    // requiredSize, not size: the slide is a fixed coordinate space and
+                    // must keep its own aspect ratio. A preferred size would be coerced
+                    // to the parent's constraints, which are far smaller than the slide,
+                    // and the box would come out the shape of the viewport instead.
+                    .requiredSize(slideW.dp, slideH.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = viewport.offset.x
+                        translationY = viewport.offset.y
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    }
+                    .shadow(SlideElevation, shape)
+                    .clip(shape)
+                    .background(slideBackground)
+                    .border(1.dp, colors.borderSoft, shape)
+            ) {
+                val shapes = vm.currentShapes
+                if (shapes.isEmpty()) {
+                    Text(
+                        text = "Blank slide. Tap 'Text' to add a text box.",
+                        style = KernType.body.copy(fontSize = SlideTextSize),
+                        color = colors.text.copy(alpha = 0.5f),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                } else {
+                    shapes.forEachIndexed { i, shapeState ->
+                        SlideTextShape(vm, i, shapeState, scale)
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * One editable text shape, positioned in the slide's coordinate space.
+ *
+ * A shape the file gives no geometry for is staggered by its index rather than dropped
+ * at a fixed spot, so several of them stay separately reachable instead of covering
+ * one another exactly.
+ */
+@Composable
+private fun SlideTextShape(
+    vm: PptEditorViewModel,
+    index: Int,
+    shapeState: PptEditorViewModel.ShapeState,
+    scale: Float,
+) {
+    val colors = KernTheme.colors
+    val isSelected = vm.selectedShapeIndex == index
+    val bounds = shapeState.bounds ?: PptDocument.ShapeBounds(
+        x = FallbackShapeInset,
+        y = FallbackShapeInset + index * FallbackShapeStep,
+        width = FallbackShapeWidth,
+        height = FallbackShapeHeight,
+    )
+    val outline = RoundedCornerShape(KernRadius.innerSmall)
+
+    Box(
+        modifier = Modifier
+            .offset(x = bounds.x.dp, y = bounds.y.dp)
+            .size(width = bounds.width.dp, height = bounds.height.dp)
+            .clip(outline)
+            .background(if (isSelected) colors.accentSoft.copy(alpha = 0.25f) else Color.Transparent)
+            // Divided by the canvas scale so the selection outline keeps the same
+            // apparent weight however far the slide is zoomed in.
+            .border(
+                width = if (isSelected) (SelectedOutlineWidth / scale).dp else 0.dp,
+                color = if (isSelected) colors.accent else Color.Transparent,
+                shape = outline,
+            )
+            .padding(4.dp),
+    ) {
+        BasicTextField(
+            value = shapeState.textValue,
+            onValueChange = {
+                vm.selectShape(index)
+                vm.updateShapeValue(index, it)
+            },
+            textStyle = TextStyle(
+                fontFamily = OutfitFamily,
+                fontSize = SlideTextSize,
+                color = colors.text,
+            ),
+            cursorBrush = SolidColor(colors.accent),
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

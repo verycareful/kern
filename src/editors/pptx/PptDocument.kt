@@ -1,9 +1,12 @@
 package dev.kern.editors.pptx
 
 import org.apache.poi.xslf.usermodel.XMLSlideShow
+import org.apache.poi.xslf.usermodel.XSLFSlide
 import org.apache.poi.xslf.usermodel.XSLFTextParagraph
 import org.apache.poi.xslf.usermodel.XSLFTextRun
 import org.apache.poi.xslf.usermodel.XSLFTextShape
+import org.apache.xmlbeans.XmlObject
+import org.openxmlformats.schemas.presentationml.x2006.main.CTShape
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
@@ -12,6 +15,12 @@ import java.io.ByteArrayOutputStream
  * Extracts editable slides, text shapes, bounding boxes, and per-run character formatting.
  * Non-destructive round-trip serialization preserving unedited shapes, slides, and layouts.
  */
+/**
+ * English Metric Units per point. OOXML stores every offset and extent in EMU,
+ * while the editor and the slide canvas both work in points.
+ */
+private const val EmuPerPoint = 12700f
+
 object PptDocument {
 
     data class RunStyle(
@@ -69,17 +78,14 @@ object PptDocument {
         XMLSlideShow(ByteArrayInputStream(bytes)).use { ppt ->
             val slidesText = ArrayList<List<String>>()
             val slideModels = ArrayList<SlideModel>()
+            // ppt.pageSize would give this directly but returns java.awt.Dimension,
+            // and Android ships no java.awt.geom. This typed accessor is equivalent
+            // and drags in no AWT. A deck declaring no sldSz keeps the default below.
             var slideWidth = 960f
             var slideHeight = 540f
-            try {
-                val presXml = ppt.ctPresentation.toString()
-                val match = Regex("""<p:sldSz[^>]*\s+cx="(\d+)"\s+cy="(\d+)"""").find(presXml)
-                if (match != null) {
-                    slideWidth = match.groupValues[1].toFloat() / 12700f
-                    slideHeight = match.groupValues[2].toFloat() / 12700f
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            ppt.ctPresentation?.sldSz?.let { size ->
+                slideWidth = size.cx / EmuPerPoint
+                slideHeight = size.cy / EmuPerPoint
             }
 
             for ((sIndex, slide) in ppt.slides.withIndex()) {
@@ -102,21 +108,7 @@ object PptDocument {
                     val rawText = shape.text ?: ""
                     shapeTexts.add(rawText)
                     
-                    var bounds: ShapeBounds? = null
-                    try {
-                        val shapeXml = shape.xmlObject.toString()
-                        val offMatch = Regex("""<a:off\s+x="(-?\d+)"\s+y="(-?\d+)"""").find(shapeXml)
-                        val extMatch = Regex("""<a:ext\s+cx="(\d+)"\s+cy="(\d+)"""").find(shapeXml)
-                        if (offMatch != null && extMatch != null) {
-                            val x = offMatch.groupValues[1].toFloat() / 12700f
-                            val y = offMatch.groupValues[2].toFloat() / 12700f
-                            val w = extMatch.groupValues[1].toFloat() / 12700f
-                            val h = extMatch.groupValues[2].toFloat() / 12700f
-                            bounds = ShapeBounds(x, y, w, h)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                    val bounds = boundsOf(shape)
 
                     val runs = ArrayList<ShapeRun>()
                     for (para in shape.textParagraphs) {
@@ -257,6 +249,64 @@ object PptDocument {
                 ppt.write(out)
                 return out.toByteArray()
             }
+        }
+    }
+
+    /**
+     * A shape's position in points, or null when nothing in the file declares one.
+     *
+     * Geometry sits on the shape when it was placed explicitly, and is inherited from
+     * the slide layout's matching placeholder when it was not, which is the normal case
+     * for the title and body of a deck built from a template. Reading only the first of
+     * those leaves every inherited placeholder with no position at all.
+     *
+     * POI exposes the resolved rectangle as getAnchor(), but that returns
+     * java.awt.geom.Rectangle2D and Android ships no java.awt.geom, so this reads the
+     * typed OOXML accessors instead. Do not replace it with shape.anchor: it compiles
+     * and then throws NoClassDefFoundError on a device.
+     */
+    private fun boundsOf(shape: XSLFTextShape): ShapeBounds? {
+        boundsOfXml(shape.xmlObject)?.let { return it }
+        val slot = shape.placeholder ?: return null
+        val layout = (shape.sheet as? XSLFSlide)?.slideLayout ?: return null
+        val inherited = layout.placeholders.firstOrNull { it.placeholder == slot } ?: return null
+        return boundsOfXml(inherited.xmlObject)
+    }
+
+    private fun boundsOfXml(xml: XmlObject): ShapeBounds? {
+        val xfrm = (xml as? CTShape)?.spPr?.xfrm ?: return null
+        val off = xfrm.off ?: return null
+        val ext = xfrm.ext ?: return null
+        val x = coordinateToPoints(off.x) ?: return null
+        val y = coordinateToPoints(off.y) ?: return null
+        return ShapeBounds(x, y, ext.cx / EmuPerPoint, ext.cy / EmuPerPoint)
+    }
+
+    /**
+     * A drawing coordinate in points, or null if it cannot be read.
+     *
+     * ST_Coordinate is a union type, which is why the generated accessor hands back
+     * Object rather than a number. PowerPoint writes plain EMU integers, but the schema
+     * equally allows a universal measure such as "1in" or "2.5cm", and a file using one
+     * would otherwise lose the position entirely.
+     */
+    private fun coordinateToPoints(value: Any?): Float? = when (value) {
+        is Number -> value.toFloat() / EmuPerPoint
+        is String -> measureToPoints(value)
+        else -> null
+    }
+
+    private fun measureToPoints(raw: String): Float? {
+        val text = raw.trim()
+        text.toFloatOrNull()?.let { return it / EmuPerPoint }
+        val match = Regex("""^(-?[0-9]*\.?[0-9]+)(mm|cm|in|pt|pc|pi)$""").find(text) ?: return null
+        val n = match.groupValues[1].toFloatOrNull() ?: return null
+        return when (match.groupValues[2]) {
+            "pt" -> n
+            "in" -> n * 72f
+            "cm" -> n * 72f / 2.54f
+            "mm" -> n * 72f / 25.4f
+            else -> n * 12f // pc and pi are both picas
         }
     }
 
