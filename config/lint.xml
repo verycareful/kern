@@ -8,4 +8,15 @@
     <issue id="MissingPermission" severity="error" />
     <!-- Keep accessibility honest for the editor UI. -->
     <issue id="ContentDescription" severity="warning" />
+    <!--
+      The NullSafeMutableLiveData detector ships inside the lint jar bundled with
+      androidx.lifecycle 2.8.7, compiled against a Kotlin Analysis API in which
+      KaCallableMemberCall is an interface. The lint that AGP 8.7.2 runs bundles an
+      Analysis API in which it is a class, so the detector throws
+      IncompatibleClassChangeError and takes the whole analysis down with it: no
+      report is produced for any file. Kern contains no LiveData, so the detector
+      has nothing to inspect and ignoring it costs no coverage. Realigning AGP and
+      lifecycle removes the need for this entry.
+    -->
+    <issue id="NullSafeMutableLiveData" severity="ignore" />
 </lint>
