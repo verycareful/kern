@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Window theme applied before Compose takes over. Kept minimal on purpose:
          the actual Material 3 theming is done in Compose (src/shared/theme/). -->
     <style name="Theme.Kern" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/white</item>
         <item name="android:statusBarColor">@color/kern_seed</item>
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- Display cutouts arrived in API 27, one level above Kern's minSdk of
+             26. On 26 the resource system ignores this attribute, and no device
+             at that level has a cutout to lay out around, so the theme is
+             correct across the whole supported range. -->
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
     </style>
 </resources>
