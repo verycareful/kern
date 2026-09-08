@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -48,7 +49,6 @@ import dev.kern.shared.DocumentFormat
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
-import dev.kern.shared.theme.OutfitFamily
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
 import dev.kern.shared.ui.KernBottomSheet
@@ -302,8 +302,11 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
                     .background(slideBackground)
                     .border(1.dp, colors.borderSoft, shape)
             ) {
+                // Beneath the text, so a text box always wins a tap.
+                SlideDecorationLayer(vm.currentDecorations, scale, Modifier.fillMaxSize())
+
                 val shapes = vm.currentShapes
-                if (shapes.isEmpty()) {
+                if (shapes.isEmpty() && vm.currentDecorations.isEmpty()) {
                     Text(
                         text = "Blank slide. Tap 'Text' to add a text box.",
                         style = KernType.body.copy(fontSize = SlideTextSize),
@@ -365,8 +368,11 @@ private fun SlideTextShape(
                 vm.selectShape(index)
                 vm.updateShapeValue(index, it)
             },
+            // The base for a run that names no font. A neutral system sans, not the
+            // app's own display face: this is document content, and it has to sit
+            // consistently beside runs whose named font maps to the same generic.
             textStyle = TextStyle(
-                fontFamily = OutfitFamily,
+                fontFamily = FontFamily.SansSerif,
                 fontSize = SlideTextSize,
                 color = colors.text,
             ),

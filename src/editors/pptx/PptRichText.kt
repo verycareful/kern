@@ -74,9 +74,17 @@ object PptRichText {
         val decorations = buildList {
             if (s.underline) add(TextDecoration.Underline)
         }
+        // A deck's actual typeface cannot be reproduced without shipping it, so each
+        // family is mapped to the closest generic Android provides. The original name is
+        // kept as a string annotation and written back on save, so another application
+        // still opens the file in Calibri or whatever it was authored in.
         val composeFont = when (s.fontFamily?.lowercase()) {
-            "times new roman", "georgia", "garamond", "cambria", "palatino", "serif" -> FontFamily.Serif
-            "courier new", "consolas", "lucida console", "monospace", "courier" -> FontFamily.Monospace
+            "times new roman", "times", "georgia", "garamond", "cambria", "palatino",
+            "book antiqua", "constantia", "serif" -> FontFamily.Serif
+
+            "courier new", "courier", "consolas", "lucida console", "monaco", "menlo",
+            "monospace" -> FontFamily.Monospace
+
             null -> null
             else -> FontFamily.SansSerif
         }

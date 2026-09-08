@@ -1,11 +1,20 @@
 package dev.kern.editors.pptx
 
 import org.apache.poi.xslf.usermodel.XMLSlideShow
+import org.apache.poi.xslf.usermodel.XSLFGraphicFrame
+import org.apache.poi.xslf.usermodel.XSLFGroupShape
+import org.apache.poi.xslf.usermodel.XSLFPictureData
+import org.apache.poi.xslf.usermodel.XSLFPictureShape
+import org.apache.poi.xslf.usermodel.XSLFShape
 import org.apache.poi.xslf.usermodel.XSLFSlide
+import org.apache.poi.xslf.usermodel.XSLFTable
 import org.apache.poi.xslf.usermodel.XSLFTextParagraph
 import org.apache.poi.xslf.usermodel.XSLFTextRun
 import org.apache.poi.xslf.usermodel.XSLFTextShape
 import org.apache.xmlbeans.XmlObject
+import org.openxmlformats.schemas.presentationml.x2006.main.CTConnector
+import org.openxmlformats.schemas.presentationml.x2006.main.CTGraphicalObjectFrame
+import org.openxmlformats.schemas.presentationml.x2006.main.CTPicture
 import org.openxmlformats.schemas.presentationml.x2006.main.CTShape
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -53,12 +62,69 @@ object PptDocument {
         BLANK,
     }
 
+    /**
+     * Something on a slide that the editor draws but does not edit.
+     *
+     * Editable text keeps its own list with stable indices, because those indices are how
+     * an edit is routed back to the right POI shape on save. Decorations carry no index
+     * and are drawn underneath, so adding support for a new kind cannot disturb editing.
+     */
+    sealed interface SlideDecoration {
+        val bounds: ShapeBounds?
+    }
+
+    /**
+     * An embedded raster image.
+     *
+     * [fillsShape] separates the two ways an image reaches a slide. A placed picture is
+     * framed to its own proportions and must not be cropped, so it is fitted. A shape's
+     * fill is the shape's surface: PowerPoint scales it to cover and crops the overflow,
+     * which is what `a:stretch` with negative `fillRect` insets describes. Fitting one of
+     * those leaves the slide showing through around a full-bleed backdrop.
+     */
+    data class PictureDecoration(
+        val bytes: ByteArray,
+        val fileName: String?,
+        override val bounds: ShapeBounds?,
+        val fillsShape: Boolean = false,
+    ) : SlideDecoration {
+        override fun equals(other: Any?): Boolean {
+            if (other !is PictureDecoration) return false
+            return bytes.contentEquals(other.bytes) && fileName == other.fileName &&
+                bounds == other.bounds && fillsShape == other.fillsShape
+        }
+
+        override fun hashCode(): Int {
+            var result = bytes.contentHashCode()
+            result = 31 * result + (fileName?.hashCode() ?: 0)
+            result = 31 * result + (bounds?.hashCode() ?: 0)
+            return 31 * result + fillsShape.hashCode()
+        }
+    }
+
+    /** A table, as plain cell text in row order. */
+    data class TableDecoration(
+        val rows: List<List<String>>,
+        override val bounds: ShapeBounds?,
+    ) : SlideDecoration
+
+    /**
+     * A shape the editor cannot draw yet: a chart, SmartArt, an embedded object, or a
+     * group. Drawn as a labelled outline in the right place, because a reader needs to
+     * know something is there. Silently dropping it is what makes a deck look corrupted.
+     */
+    data class UnsupportedDecoration(
+        val label: String,
+        override val bounds: ShapeBounds?,
+    ) : SlideDecoration
+
     data class SlideModel(
         val slideIndex: Int,
         val shapes: List<TextShapeModel>,
         val width: Float,
         val height: Float,
         val backgroundColorHex: String?,
+        val decorations: List<SlideDecoration> = emptyList(),
     )
 
     /** slides[s] = the text of each text shape on slide s, in shape order. */
@@ -89,7 +155,7 @@ object PptDocument {
             }
 
             for ((sIndex, slide) in ppt.slides.withIndex()) {
-                val textShapes = slide.shapes.filterIsInstance<XSLFTextShape>()
+                val textShapes = editableTextShapes(slide)
                 val shapeTexts = ArrayList<String>()
                 val shapeModels = ArrayList<TextShapeModel>()
                 
@@ -158,7 +224,7 @@ object PptDocument {
                 }
 
                 slidesText.add(shapeTexts)
-                slideModels.add(SlideModel(slideIndex = sIndex, shapes = shapeModels, width = slideWidth, height = slideHeight, backgroundColorHex = bgColorHex))
+                slideModels.add(SlideModel(slideIndex = sIndex, shapes = shapeModels, width = slideWidth, height = slideHeight, backgroundColorHex = bgColorHex, decorations = decorationsOf(slide)))
             }
 
             return Parsed(
@@ -201,10 +267,11 @@ object PptDocument {
                     is DuplicateSlide -> {
                         if (op.fromIndex in ppt.slides.indices) {
                             val sourceSlide = ppt.slides[op.fromIndex]
-                            val newSlide = ppt.createSlide()
-                            for (shape in sourceSlide.shapes.filterIsInstance<XSLFTextShape>()) {
-                                val newTb = newSlide.createTextBox()
-                                newTb.text = shape.text
+                            val newSlide = ppt.createSlide(sourceSlide.slideLayout)
+                            copySlideContent(sourceSlide, newSlide)
+                            // createSlide appends; the duplicate belongs next to its source.
+                            if (op.atIndex in ppt.slides.indices) {
+                                ppt.setSlideOrder(newSlide, op.atIndex)
                             }
                         }
                     }
@@ -232,7 +299,7 @@ object PptDocument {
             for ((key, runs) in richEdits) {
                 val (slideIndex, shapeIndex) = key
                 if (slideIndex < 0 || slideIndex >= slides.size) continue
-                val textShapes = slides[slideIndex].shapes.filterIsInstance<XSLFTextShape>()
+                val textShapes = editableTextShapes(slides[slideIndex])
                 val shape = textShapes.getOrNull(shapeIndex) ?: continue
                 applyRunsToShape(shape, runs)
             }
@@ -241,7 +308,7 @@ object PptDocument {
                 if (richEdits.containsKey(key)) continue
                 val (slideIndex, shapeIndex) = key
                 if (slideIndex < 0 || slideIndex >= slides.size) continue
-                val textShapes = slides[slideIndex].shapes.filterIsInstance<XSLFTextShape>()
+                val textShapes = editableTextShapes(slides[slideIndex])
                 textShapes.getOrNull(shapeIndex)?.setText(text)
             }
 
@@ -251,6 +318,98 @@ object PptDocument {
             }
         }
     }
+
+    /**
+     * The text shapes of a slide, in the order the editor addresses them.
+     *
+     * Read and write both go through this, and they have to agree exactly: an edit is
+     * routed back to POI by its index in this list, so a shape excluded on one side and
+     * kept on the other would send the edit to the wrong shape.
+     *
+     * A shape that is filled with a picture and carries no text is background art rather
+     * than content. PowerPoint draws a full-slide backdrop as an autoshape with a picture
+     * fill, and XSLFAutoShape extends XSLFTextShape, so without this it arrives as an
+     * empty text box covering the entire slide.
+     */
+    private fun editableTextShapes(slide: XSLFSlide): List<XSLFTextShape> =
+        slide.shapes.filterIsInstance<XSLFTextShape>()
+            .filterNot { it.text.isNullOrBlank() && fillPictureOf(it) != null }
+
+    /**
+     * The image a shape is filled with, resolved through the sheet's relationships.
+     *
+     * This is a separate path from XSLFPictureShape: a picture placed on a slide is a
+     * p:pic, but a shape whose surface is an image is a p:sp whose spPr carries a
+     * blipFill referencing the image by relationship id.
+     */
+    private fun fillPictureOf(shape: XSLFShape): PictureDecoration? {
+        val spPr = when (val xml = shape.xmlObject) {
+            is CTShape -> xml.spPr
+            is CTConnector -> xml.spPr
+            else -> null
+        } ?: return null
+        // A blip with no embed is an SVG carried only in an extension list, which has no
+        // raster for BitmapFactory to decode.
+        val embedId = spPr.blipFill?.blip?.embed?.takeIf { it.isNotBlank() } ?: return null
+        val picture = shape.sheet?.getRelationById(embedId) as? XSLFPictureData ?: return null
+        val bytes = picture.data?.takeIf { it.isNotEmpty() } ?: return null
+        return PictureDecoration(bytes, picture.fileName, boundsOfXml(shape.xmlObject), fillsShape = true)
+    }
+
+    /**
+     * Copies one slide's shape tree onto another, keeping images, tables, formatting and
+     * positions. Rebuilding a slide from its text alone would keep the words and discard
+     * everything else, which is silent data loss on the user's file.
+     *
+     * POI's importContent does exactly this and then walks the copied shapes through
+     * XSLFShape.copy, which reads getAnchor and constructs java.awt.geom.Rectangle2D.
+     * Android ships no java.awt.geom, so that path throws NoClassDefFoundError the moment
+     * the slide holds a picture. Copying the XML and re-declaring the source's package
+     * relationships reaches the same result without constructing a shape object at all.
+     *
+     * Known limit: POI's cached shape list for the target is not rebuilt, because the only
+     * method that rebuilds it is the one that crashes. A text edit made to a duplicated
+     * slide before the file has been saved is therefore not written. Editing the duplicate
+     * after reopening the file behaves normally.
+     */
+    private fun copySlideContent(source: XSLFSlide, target: XSLFSlide) {
+        // The copied shape XML refers to its images by relationship id (r:embed="rId2"),
+        // so the target part has to declare the same ids against the same targets. The
+        // image parts themselves are shared, not duplicated.
+        val taken = target.packagePart.relationships.map { it.id }.toSet()
+        for (rel in source.packagePart.relationships) {
+            if (rel.id in taken) continue
+            target.packagePart.addRelationship(rel.targetURI, rel.targetMode, rel.relationshipType, rel.id)
+        }
+        target.xmlObject.cSld.spTree.set(source.xmlObject.cSld.spTree)
+    }
+
+    /**
+     * Everything on a slide that is not editable text, in document order.
+     *
+     * A group is reported as unsupported rather than recursed into: its children carry
+     * coordinates relative to the group's own child offset, so drawing them without
+     * applying that transform would scatter them across the slide.
+     */
+    private fun decorationsOf(slide: XSLFSlide): List<SlideDecoration> =
+        slide.shapes.mapNotNull { shape ->
+            when (shape) {
+                is XSLFPictureShape -> shape.pictureData?.data
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { PictureDecoration(it, shape.pictureData?.fileName, boundsOfXml(shape.xmlObject)) }
+
+                is XSLFTable -> TableDecoration(
+                    rows = shape.rows.map { row -> row.cells.map { it.text ?: "" } },
+                    bounds = boundsOfXml(shape.xmlObject),
+                )
+
+                is XSLFGraphicFrame -> UnsupportedDecoration("Chart or diagram", boundsOfXml(shape.xmlObject))
+                is XSLFGroupShape -> UnsupportedDecoration("Grouped shapes", boundsOfXml(shape.xmlObject))
+                // An autoshape whose surface is an image, which is how a full-slide
+                // backdrop is normally authored.
+                else -> fillPictureOf(shape)
+            }
+        }
 
     /**
      * A shape's position in points, or null when nothing in the file declares one.
@@ -274,7 +433,15 @@ object PptDocument {
     }
 
     private fun boundsOfXml(xml: XmlObject): ShapeBounds? {
-        val xfrm = (xml as? CTShape)?.spPr?.xfrm ?: return null
+        // Each shape kind hangs its transform in a slightly different place, and a
+        // graphic frame keeps xfrm directly rather than under spPr.
+        val xfrm = when (xml) {
+            is CTShape -> xml.spPr?.xfrm
+            is CTPicture -> xml.spPr?.xfrm
+            is CTConnector -> xml.spPr?.xfrm
+            is CTGraphicalObjectFrame -> xml.xfrm
+            else -> null
+        } ?: return null
         val off = xfrm.off ?: return null
         val ext = xfrm.ext ?: return null
         val x = coordinateToPoints(off.x) ?: return null

@@ -49,6 +49,8 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
         width: Float = 960f,
         height: Float = 540f,
         backgroundColorHex: String? = null,
+        /** Pictures, tables and not-yet-drawable shapes. Read-only, so no state wrapper. */
+        val decorations: List<PptDocument.SlideDecoration> = emptyList(),
     ) {
         /** A snapshot list, so adding or deleting a text box recomposes the canvas. */
         val shapes: SnapshotStateList<ShapeState> =
@@ -62,7 +64,8 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
             width: Float = this.width,
             height: Float = this.height,
             backgroundColorHex: String? = this.backgroundColorHex,
-        ) = SlideState(shapes, width, height, backgroundColorHex)
+            decorations: List<PptDocument.SlideDecoration> = this.decorations,
+        ) = SlideState(shapes, width, height, backgroundColorHex, decorations)
     }
 
     data class HistorySnapshot(
@@ -114,6 +117,9 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
     val currentShapes: List<ShapeState>
         get() = currentSlideState?.shapes ?: emptyList()
 
+    val currentDecorations: List<PptDocument.SlideDecoration>
+        get() = currentSlideState?.decorations ?: emptyList()
+
     val caretStyle: PptDocument.RunStyle
         get() {
             val shapeIdx = selectedShapeIndex ?: return PptDocument.RunStyle()
@@ -155,9 +161,9 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
                         val fallback = parsed.slides.getOrNull(slide.slideIndex)?.map {
                             ShapeState(textValue = TextFieldValue(it))
                         }?.toMutableList() ?: mutableListOf(ShapeState(textValue = TextFieldValue("")))
-                        slideStates.add(SlideState(shapes = fallback, width = slide.width, height = slide.height, backgroundColorHex = slide.backgroundColorHex))
+                        slideStates.add(SlideState(shapes = fallback, width = slide.width, height = slide.height, backgroundColorHex = slide.backgroundColorHex, decorations = slide.decorations))
                     } else {
-                        slideStates.add(SlideState(shapes = if (shapes.isEmpty()) mutableListOf(ShapeState(textValue = TextFieldValue(""))) else shapes, width = slide.width, height = slide.height, backgroundColorHex = slide.backgroundColorHex))
+                        slideStates.add(SlideState(shapes = if (shapes.isEmpty()) mutableListOf(ShapeState(textValue = TextFieldValue(""))) else shapes, width = slide.width, height = slide.height, backgroundColorHex = slide.backgroundColorHex, decorations = slide.decorations))
                     }
                 }
                 if (slideStates.isEmpty()) {
@@ -224,7 +230,7 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
         pushHistory()
         val cloneShapes = slide.shapes.map { it.copy(textValue = it.textValue.copy()) }.toMutableList()
         val insertAt = index + 1
-        slideStates.add(insertAt, SlideState(shapes = cloneShapes, width = slide.width, height = slide.height, backgroundColorHex = slide.backgroundColorHex))
+        slideStates.add(insertAt, SlideState(shapes = cloneShapes, width = slide.width, height = slide.height, backgroundColorHex = slide.backgroundColorHex, decorations = slide.decorations))
         slideOps.add(PptDocument.DuplicateSlide(index, insertAt))
         currentSlide = insertAt
         selectedShapeIndex = null
