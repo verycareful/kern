@@ -40,12 +40,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- "Open with" - view/edit handlers for every supported format. -->
+            <!-- "Open with" - view/edit handlers for every supported format.
+                 Matches on MIME type alone: no URL scheme is declared here, so
+                 the filter carries no BROWSABLE category. -->
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="text/csv" />
                 <data android:mimeType="text/comma-separated-values" />
                 <data android:mimeType="application/pdf" />
