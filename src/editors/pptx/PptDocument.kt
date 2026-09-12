@@ -12,6 +12,7 @@ import org.apache.poi.xslf.usermodel.XSLFTextParagraph
 import org.apache.poi.xslf.usermodel.XSLFTextRun
 import org.apache.poi.xslf.usermodel.XSLFTextShape
 import org.apache.xmlbeans.XmlObject
+import org.openxmlformats.schemas.drawingml.x2006.main.CTSRgbColor
 import org.openxmlformats.schemas.presentationml.x2006.main.CTConnector
 import org.openxmlformats.schemas.presentationml.x2006.main.CTGraphicalObjectFrame
 import org.openxmlformats.schemas.presentationml.x2006.main.CTPicture
@@ -105,6 +106,24 @@ object PptDocument {
     /** A table, as plain cell text in row order. */
     data class TableDecoration(
         val rows: List<List<String>>,
+        override val bounds: ShapeBounds?,
+    ) : SlideDecoration
+
+    /**
+     * A preset autoshape, drawn as vector geometry: the boxes and arrows of a diagram.
+     *
+     * [preset] is the DrawingML preset name (`roundRect`, `rightArrow`, ...) and the
+     * renderer decides whether it knows the outline; [adjustments] are the shape's own
+     * `avLst` guides, keyed by name, in DrawingML's 1/100000 units. Colours are sRGB hex
+     * without a hash; a null fill or outline means the file declares none. When the
+     * shape also carries text, that text is a separate editable shape drawn on top.
+     */
+    data class GeometryDecoration(
+        val preset: String,
+        val fillHex: String?,
+        val lineHex: String?,
+        val lineWidth: Float,
+        val adjustments: Map<String, Int>,
         override val bounds: ShapeBounds?,
     ) : SlideDecoration
 
@@ -326,14 +345,18 @@ object PptDocument {
      * routed back to POI by its index in this list, so a shape excluded on one side and
      * kept on the other would send the edit to the wrong shape.
      *
-     * A shape that is filled with a picture and carries no text is background art rather
-     * than content. PowerPoint draws a full-slide backdrop as an autoshape with a picture
-     * fill, and XSLFAutoShape extends XSLFTextShape, so without this it arrives as an
-     * empty text box covering the entire slide.
+     * A shape that carries no text but does carry a fill is artwork rather than content:
+     * the full-slide backdrop PowerPoint authors as an autoshape with a picture fill, or
+     * the solid arrows of a diagram. XSLFAutoShape extends XSLFTextShape, so without this
+     * each of them arrives as an empty text box, the backdrop covering the entire slide.
+     * An empty shape with no fill stays editable, because that is an empty text box.
      */
     private fun editableTextShapes(slide: XSLFSlide): List<XSLFTextShape> =
         slide.shapes.filterIsInstance<XSLFTextShape>()
-            .filterNot { it.text.isNullOrBlank() && fillPictureOf(it) != null }
+            .filterNot { it.text.isNullOrBlank() && isFilledArtwork(it) }
+
+    private fun isFilledArtwork(shape: XSLFShape): Boolean =
+        fillPictureOf(shape) != null || geometryOf(shape)?.fillHex != null
 
     /**
      * The image a shape is filled with, resolved through the sheet's relationships.
@@ -355,6 +378,39 @@ object PptDocument {
         val bytes = picture.data?.takeIf { it.isNotEmpty() } ?: return null
         return PictureDecoration(bytes, picture.fileName, boundsOfXml(shape.xmlObject), fillsShape = true)
     }
+
+    /**
+     * The preset geometry and paint of an autoshape, or null when there is nothing to
+     * draw: no preset, or neither a fill nor an outline declared on the shape itself.
+     *
+     * Only what the shape declares directly is read. A fill or outline inherited through
+     * `p:style` references into the theme, and a `schemeClr` in place of an sRGB value,
+     * both need the theme resolver that slide backgrounds also wait on, so they are
+     * treated as absent for now rather than guessed.
+     */
+    private fun geometryOf(shape: XSLFShape): GeometryDecoration? {
+        val xml = shape.xmlObject as? CTShape ?: return null
+        val spPr = xml.spPr ?: return null
+        val geom = spPr.prstGeom ?: return null
+        val preset = geom.prst?.toString() ?: return null
+        val fillHex = spPr.solidFill?.srgbClr?.let { hexOf(it) }
+        val line = spPr.ln
+        val lineHex = line?.solidFill?.srgbClr?.let { hexOf(it) }
+        if (fillHex == null && lineHex == null) return null
+        // DrawingML's default outline is 9525 EMU, three quarters of a point.
+        val lineWidth = if (line != null && line.isSetW) line.w / EmuPerPoint else 0.75f
+        val adjustments = geom.avLst?.gdList.orEmpty().mapNotNull { guide ->
+            val name = guide.name ?: return@mapNotNull null
+            // Adjust guides are always literal: "val 16667".
+            val value = guide.fmla?.removePrefix("val ")?.trim()?.toIntOrNull() ?: return@mapNotNull null
+            name to value
+        }.toMap()
+        val bounds = (shape as? XSLFTextShape)?.let { boundsOf(it) } ?: boundsOfXml(xml)
+        return GeometryDecoration(preset, fillHex, lineHex, lineWidth, adjustments, bounds)
+    }
+
+    private fun hexOf(color: CTSRgbColor): String? =
+        color.`val`?.takeIf { it.size == 3 }?.joinToString("") { "%02X".format(it) }
 
     /**
      * Copies one slide's shape tree onto another, keeping images, tables, formatting and
@@ -405,9 +461,10 @@ object PptDocument {
 
                 is XSLFGraphicFrame -> UnsupportedDecoration("Chart or diagram", boundsOfXml(shape.xmlObject))
                 is XSLFGroupShape -> UnsupportedDecoration("Grouped shapes", boundsOfXml(shape.xmlObject))
-                // An autoshape whose surface is an image, which is how a full-slide
-                // backdrop is normally authored.
-                else -> fillPictureOf(shape)
+                // An autoshape: either its surface is an image, which is how a
+                // full-slide backdrop is normally authored, or it is preset geometry
+                // with a fill or outline of its own.
+                else -> fillPictureOf(shape) ?: geometryOf(shape)
             }
         }
 

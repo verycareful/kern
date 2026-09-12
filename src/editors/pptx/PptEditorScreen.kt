@@ -35,8 +35,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -64,7 +67,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
+import android.os.Build
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -272,25 +284,92 @@ private fun PptToolButtons(vm: PptEditorViewModel, onShowSlides: () -> Unit) {
 @Composable
 private fun PptSideRail(vm: PptEditorViewModel, onShowSlides: () -> Unit) {
     val colors = KernTheme.colors
+    val cutouts = displayCutoutRects()
+    // The band of the rail's own content that the camera hole covers, if any.
+    var cutoutBand by remember { mutableStateOf<IntRange?>(null) }
     Row(Modifier.fillMaxHeight()) {
         // KernDivider is horizontal only; the rail's edge is the same hairline turned.
         Box(Modifier.fillMaxHeight().width(1.dp).background(colors.borderSoft))
-        Column(
+        RailColumn(
+            band = cutoutBand,
+            spacing = 2.dp,
             modifier = Modifier
-                .width(SideRailWidth)
                 .fillMaxHeight()
                 .background(colors.bg)
                 // The rail sits on the trailing edge, where a rotated phone puts its
-                // navigation bar or display cutout.
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
+                // navigation bar. The display cutout is deliberately not an inset
+                // here: the hole is a short band, not the whole edge, and insetting
+                // the full edge would push the rail a camera's width inward. The
+                // band is skipped by the layout instead, so the rail stays flush.
+                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
+                .width(SideRailWidth)
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+                .padding(vertical = 6.dp)
+                .onGloballyPositioned { coords ->
+                    val origin = coords.positionInWindow()
+                    val right = origin.x + coords.size.width
+                    cutoutBand = cutouts
+                        .firstOrNull { it.left < right && it.right > origin.x }
+                        ?.let { (it.top - origin.y).roundToInt()..(it.bottom - origin.y).roundToInt() }
+                },
         ) {
             PageIndicator(vm, vertical = true)
             ToolbarSeparator()
             PptToolButtons(vm, onShowSlides)
+        }
+    }
+}
+
+/** The display cutout's non-functional areas in window pixels; empty before API 28. */
+@Composable
+private fun displayCutoutRects(): List<Rect> {
+    val view = LocalView.current
+    val configuration = LocalConfiguration.current
+    return remember(view, configuration) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return@remember emptyList()
+        view.rootWindowInsets?.displayCutout?.boundingRects.orEmpty().map {
+            Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat())
+        }
+    }
+}
+
+/**
+ * A centred column that flows its children around [band], a vertical range of its own
+ * coordinates that nothing may be placed in. A child that would overlap the band is
+ * moved to just below it, and everything after follows.
+ *
+ * The band's height is reserved in the reported height even when it falls in a gap
+ * between children, and one child height on top of that for the worst case. The
+ * content is scrolled, and its scroll range is its height: a height that depended on
+ * where the band currently sits would move the range, which moves the content, which
+ * moves the band, without end.
+ */
+@Composable
+private fun RailColumn(
+    band: IntRange?,
+    spacing: Dp,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(content, modifier) { measurables, constraints ->
+        val gap = spacing.roundToPx()
+        val placeables = measurables.map {
+            it.measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity))
+        }
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else placeables.maxOfOrNull { it.width } ?: 0
+        var y = 0
+        val tops = placeables.map { placeable ->
+            if (band != null && y < band.last && y + placeable.height > band.first) y = band.last + gap
+            val top = y
+            y += placeable.height + gap
+            top
+        }
+        val natural = placeables.sumOf { it.height } + gap * (placeables.size - 1).coerceAtLeast(0)
+        val reserved = band?.let { it.last - it.first + gap + (placeables.maxOfOrNull { p -> p.height } ?: 0) } ?: 0
+        layout(width, constraints.constrainHeight(natural + reserved)) {
+            placeables.forEachIndexed { i, placeable ->
+                placeable.placeRelative((width - placeable.width) / 2, tops[i])
+            }
         }
     }
 }
@@ -377,33 +456,50 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
                     // must keep its own aspect ratio. A preferred size would be coerced
                     // to the parent's constraints, which are far smaller than the slide,
                     // and the box would come out the shape of the viewport instead.
-                    .requiredSize(slideW.dp, slideH.dp)
+                    .requiredSize((slideW * scale).dp, (slideH * scale).dp)
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
                         translationX = viewport.offset.x
                         translationY = viewport.offset.y
-                        transformOrigin = TransformOrigin(0.5f, 0.5f)
                     }
                     .shadow(SlideElevation, shape)
                     .clip(shape)
                     .background(slideBackground)
                     .border(1.dp, colors.borderSoft, shape)
             ) {
-                // Beneath the text, so a text box always wins a tap.
-                SlideDecorationLayer(vm.currentDecorations, scale, Modifier.fillMaxSize())
+                // The slide is laid out at its on-screen size, not laid out at natural
+                // size and scaled at draw time. A drawn scale is invisible to the text
+                // cursor handle and the text toolbar, which are popups anchored in
+                // real pixels: they landed at the unscaled offset from the shape's
+                // origin, nowhere near the caret. Scaling the density instead makes
+                // every dp and sp inside the slide mean "slide points times scale", so
+                // one point of slide geometry is one dp of layout and text measures at
+                // its true on-screen size.
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density.density * scale, density.fontScale),
+                    // No teardrop: the caret itself marks the insertion point. Selection
+                    // keeps its highlight; only the draggable handles go.
+                    LocalTextSelectionColors provides TextSelectionColors(
+                        handleColor = Color.Transparent,
+                        backgroundColor = colors.accent.copy(alpha = 0.35f),
+                    ),
+                ) {
+                    Box(Modifier.fillMaxSize()) {
+                        // Beneath the text, so a text box always wins a tap.
+                        SlideDecorationLayer(vm.currentDecorations, Modifier.fillMaxSize())
 
-                val shapes = vm.currentShapes
-                if (shapes.isEmpty() && vm.currentDecorations.isEmpty()) {
-                    Text(
-                        text = "Blank slide. Tap 'Text' to add a text box.",
-                        style = KernType.body.copy(fontSize = SlideTextSize),
-                        color = colors.text.copy(alpha = 0.5f),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                } else {
-                    shapes.forEachIndexed { i, shapeState ->
-                        SlideTextShape(vm, i, shapeState, scale)
+                        val shapes = vm.currentShapes
+                        if (shapes.isEmpty() && vm.currentDecorations.isEmpty()) {
+                            Text(
+                                text = "Blank slide. Add a text box from the toolbar.",
+                                style = KernType.body.copy(fontSize = SlideTextSize),
+                                color = colors.text.copy(alpha = 0.5f),
+                                modifier = Modifier.align(Alignment.Center),
+                            )
+                        } else {
+                            shapes.forEachIndexed { i, shapeState ->
+                                SlideTextShape(vm, i, shapeState, scale)
+                            }
+                        }
                     }
                 }
             }
@@ -441,8 +537,8 @@ private fun SlideTextShape(
             .size(width = bounds.width.dp, height = bounds.height.dp)
             .clip(outline)
             .background(if (isSelected) colors.accentSoft.copy(alpha = 0.25f) else Color.Transparent)
-            // Divided by the canvas scale so the selection outline keeps the same
-            // apparent weight however far the slide is zoomed in.
+            // Dp inside the slide is scaled with it; dividing by the canvas scale keeps
+            // the selection outline at the same apparent weight at every zoom.
             .border(
                 width = if (isSelected) (SelectedOutlineWidth / scale).dp else 0.dp,
                 color = if (isSelected) colors.accent else Color.Transparent,
@@ -734,12 +830,6 @@ private fun PptColorPicker(
             }
         }
     }
-}
-
-private fun parseHex(hex: String): Color {
-    val clean = hex.removePrefix("#")
-    val parsed = clean.toLongOrNull(16) ?: 0xFFFFFFFF
-    return if (clean.length <= 6) Color(0xFF000000 or parsed) else Color(parsed)
 }
 
 @Composable
