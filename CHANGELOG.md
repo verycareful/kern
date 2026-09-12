@@ -2,6 +2,40 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.11.0] - 2026-09-12 18:20 IST
+
+### Added
+- **PowerPoint Rich-Text Model** (`PptDocument.kt`, `PptRichText.kt`): run-level model (bold, italic, underline, size, colour, font family) bridged to Compose `AnnotatedString`, with paragraph breaks, paragraph alignment (left, centre, right, justify) and vertical anchor (top, middle, bottom) read from the file, shown, editable and written back
+- **Slide Operations**: insert (title, title and content, section header, blank), duplicate, delete and move slides; add text box; layout picker and slide action sheets
+- **Editing Tools**: 30-step Undo and Redo with typing coalesced into bursts; formatting applies to the highlighted text, else the word at the caret, else the next text typed; font size, colour and alignment sheets; caret style tracking in the toolbar
+- **Move and Resize**: text boxes, pictures, drawn shapes, tables and placeholders can be selected, dragged by a grip and resized by corner handles; positions are written as `a:xfrm`
+- **Slide Rendering** (`PptSlideDecorations.kt`, `PptShapeGeometry.kt`): pictures placed or used as a shape fill (cover and crop), tables, preset autoshapes (`rect`, `roundRect`, `ellipse`, `diamond`, `triangle`, `line`, block arrows) with fills, gradients and outlines, and labelled placeholders for charts, SmartArt, groups and undecodable images, each at its real position
+- **Theme Resolver** (`PptTheme.kt`): colour scheme, colour map with slide and layout overrides, `lumMod`/`lumOff`/`tint`/`shade`/`alpha`, style matrix references (`fillRef`, `lnRef`, `fontRef`, `bgRef`), linear gradients; drives slide backgrounds (own, layout, master), shape paint and inherited text colour through typed OOXML, with no `java.awt` involvement
+- **Slide Viewport** (`PptSlideViewport.kt`): two-finger pinch zoom from fit to 6x with focal-point anchoring and clamped pan; the slide is laid out at its on-screen size so caret, selection handles and text toolbar land on the text at every zoom
+- **Layout**: the canvas takes the whole editor area in both orientations; in landscape the controls sit on a 56dp side rail that stays flush with the screen edge and flows its buttons around the camera cutout; the thumbnail rail lives behind a Slides button; toolbar buttons are icon only
+
+### Changed
+- Slide size and shape bounds are read through typed OOXML accessors, with placeholder geometry inherited from the slide layout; the regex over serialised XML is gone
+- A slide is white unless the file paints it, whatever theme the app is in
+- Font families map to the nearest generic Android face for display; the original name is kept and written back
+- New slides take the deck's slide size and text colour rather than 16:9 defaults and the app's colours
+
+### Fixed
+- Text in existing shapes could not be edited and typing was slow: shape state was not Compose state, so the controlled text field discarded every keystroke
+- A keystroke stripped all formatting from the shape, and that plain text was saved
+- Every shape was rewritten on save as a single paragraph, losing paragraph breaks, alignment, bullets and spacing; now only shapes whose text, position or anchor changed are written, and paragraphs keep their properties
+- Duplicating a slide dropped every non-text shape, and the duplicate lost its own background; edits to a duplicate before saving were not written
+- Inserted slides were appended to the end of the deck instead of at their position
+- Zoom went to the top left corner only, could zoom out beyond fit, and could not pan
+- Slides rendered square; the canvas was scaled twice
+- Full-slide backdrops authored as picture-filled autoshapes were invisible and also phantom text boxes; textless filled arrows likewise
+- The caret handle appeared at the wrong place and size inside a zoomed slide
+- Group shapes, charts and diagrams are shown as labelled outlines rather than dropped
+
+### Results
+- 37 tests across 8 suites, all passed (22s, local Gradle `testDebugUnitTest`); lint clean
+- Visual inspection on device over USB debugging in both orientations: editing, formatting, move and resize, zoom and pan, backgrounds, autoshapes, duplicate and save round-trip verified against a real deck
+
 ## [0.1.10.2] - 2026-08-28 13:43 IST
 
 ### Added
