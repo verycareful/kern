@@ -59,6 +59,18 @@ import dev.kern.shared.ui.ToolbarSeparator
 import androidx.compose.ui.platform.LocalDensity
 import kotlin.math.min
 import kotlin.math.roundToInt
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 
 private const val PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
@@ -84,6 +96,7 @@ private val ThumbWidth = 92.dp
 private val ThumbHeight = 52.dp
 private val ThumbBorderWidth = 2.dp
 private val PageIndicatorMinWidth = 56.dp
+private val SideRailWidth = 56.dp
 
 private val PptFontSizes = listOf(12f, 14f, 16f, 18f, 20f, 24f, 28f, 32f, 36f, 40f, 44f, 48f, 54f, 60f, 72f)
 
@@ -101,6 +114,11 @@ fun PptEditorScreen(
 ) {
     LaunchedEffect(filePath) { vm.start(filePath) }
     val hue = KernTheme.formatColor(DocumentFormat.POWERPOINT)
+    // Phones only for now, so orientation is the whole story. In landscape a bottom bar
+    // would take a third of the height, so the controls move to a side rail instead and
+    // the chrome's bottom slot is left empty.
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var showSlides by rememberSaveable { mutableStateOf(false) }
 
     EditorChrome(
         title = vm.fileName.ifBlank { "Presentation" },
@@ -112,9 +130,13 @@ fun PptEditorScreen(
         exportMimeType = PPTX_MIME,
         exportFileName = vm.fileName.ifBlank { "export.pptx" },
         onExportToUri = vm::exportTo,
-        toolbar = { PptToolbar(vm) },
+        toolbar = if (landscape) null else ({ PptToolbar(vm, onShowSlides = { showSlides = true }) }),
     ) { modifier ->
-        SlideEditor(vm, hue, modifier)
+        SlideEditor(vm, hue, landscape, onShowSlides = { showSlides = true }, modifier = modifier)
+    }
+
+    if (showSlides) {
+        SlidesSheet(vm, onDismiss = { showSlides = false })
     }
 
     if (vm.showLayoutPicker) {
@@ -159,89 +181,155 @@ fun PptEditorScreen(
     }
 }
 
+/** The portrait bottom bar. */
 @Composable
-private fun PptToolbar(vm: PptEditorViewModel) {
+private fun PptToolbar(vm: PptEditorViewModel, onShowSlides: () -> Unit) {
+    EditorToolbar { PptToolButtons(vm, onShowSlides) }
+}
+
+/**
+ * The editor's controls, icon only. Emitted into whatever container the orientation
+ * calls for: the horizontal bottom bar in portrait, the vertical side rail in landscape.
+ * The font size button keeps its number, since "16" is information rather than a label.
+ */
+@Composable
+private fun PptToolButtons(vm: PptEditorViewModel, onShowSlides: () -> Unit) {
     val caret = vm.caretStyle
     val hasSelection = vm.selectedShapeIndex != null
-    val sizeLabel = caret.sizePt?.let { "${it.roundToInt()}" } ?: "Size"
+    val sizeLabel = caret.sizePt?.let { "${it.roundToInt()}" }
 
-    EditorToolbar {
-        ToolbarButton(
-            icon = KernIcons.Undo,
-            contentDescription = "Undo",
-            onClick = vm::undo,
-            enabled = vm.canUndo,
-        )
-        ToolbarButton(
-            icon = KernIcons.Redo,
-            contentDescription = "Redo",
-            onClick = vm::redo,
-            enabled = vm.canRedo,
-        )
-        ToolbarSeparator()
-        ToolbarButton(
-            icon = KernIcons.Plus,
-            contentDescription = "Add slide",
-            onClick = { vm.showLayoutPicker = true },
-            label = "Slide",
-        )
-        ToolbarButton(
-            icon = KernIcons.Text,
-            contentDescription = "Add text",
-            onClick = vm::addTextBox,
-            label = "Text",
-        )
-        ToolbarSeparator()
-        ToolbarButton(
-            icon = KernIcons.Bold,
-            contentDescription = "Bold",
-            onClick = vm::toggleBold,
-            active = caret.bold,
-            enabled = hasSelection,
-        )
-        ToolbarButton(
-            icon = KernIcons.Italic,
-            contentDescription = "Italic",
-            onClick = vm::toggleItalic,
-            active = caret.italic,
-            enabled = hasSelection,
-        )
-        ToolbarButton(
-            icon = KernIcons.Underline,
-            contentDescription = "Underline",
-            onClick = vm::toggleUnderline,
-            active = caret.underline,
-            enabled = hasSelection,
-        )
-        ToolbarButton(
-            icon = KernIcons.FontSize,
-            contentDescription = "Font size",
-            onClick = { vm.showFontSizeSheet = true },
-            label = sizeLabel,
-            enabled = hasSelection,
-        )
-        ToolbarButton(
-            icon = KernIcons.FontColor,
-            contentDescription = "Font color",
-            onClick = { vm.showColorSheet = true },
-            active = caret.colorHex != null,
-            enabled = hasSelection,
-        )
+    ToolbarButton(
+        icon = KernIcons.Undo,
+        contentDescription = "Undo",
+        onClick = vm::undo,
+        enabled = vm.canUndo,
+    )
+    ToolbarButton(
+        icon = KernIcons.Redo,
+        contentDescription = "Redo",
+        onClick = vm::redo,
+        enabled = vm.canRedo,
+    )
+    ToolbarSeparator()
+    ToolbarButton(
+        icon = KernIcons.Plus,
+        contentDescription = "Add slide",
+        onClick = { vm.showLayoutPicker = true },
+    )
+    ToolbarButton(
+        icon = KernIcons.Text,
+        contentDescription = "Add text",
+        onClick = vm::addTextBox,
+    )
+    ToolbarButton(
+        icon = KernIcons.Slides,
+        contentDescription = "All slides",
+        onClick = onShowSlides,
+    )
+    ToolbarSeparator()
+    ToolbarButton(
+        icon = KernIcons.Bold,
+        contentDescription = "Bold",
+        onClick = vm::toggleBold,
+        active = caret.bold,
+        enabled = hasSelection,
+    )
+    ToolbarButton(
+        icon = KernIcons.Italic,
+        contentDescription = "Italic",
+        onClick = vm::toggleItalic,
+        active = caret.italic,
+        enabled = hasSelection,
+    )
+    ToolbarButton(
+        icon = KernIcons.Underline,
+        contentDescription = "Underline",
+        onClick = vm::toggleUnderline,
+        active = caret.underline,
+        enabled = hasSelection,
+    )
+    ToolbarButton(
+        icon = KernIcons.FontSize,
+        contentDescription = "Font size",
+        onClick = { vm.showFontSizeSheet = true },
+        label = sizeLabel,
+        enabled = hasSelection,
+    )
+    ToolbarButton(
+        icon = KernIcons.FontColor,
+        contentDescription = "Font color",
+        onClick = { vm.showColorSheet = true },
+        active = caret.colorHex != null,
+        enabled = hasSelection,
+    )
+}
+
+/**
+ * The landscape controls: a narrow vertical rail on the trailing edge holding the page
+ * indicator and the same buttons as the portrait bar, so the canvas keeps the full
+ * height of the screen.
+ */
+@Composable
+private fun PptSideRail(vm: PptEditorViewModel, onShowSlides: () -> Unit) {
+    val colors = KernTheme.colors
+    Row(Modifier.fillMaxHeight()) {
+        // KernDivider is horizontal only; the rail's edge is the same hairline turned.
+        Box(Modifier.fillMaxHeight().width(1.dp).background(colors.borderSoft))
+        Column(
+            modifier = Modifier
+                .width(SideRailWidth)
+                .fillMaxHeight()
+                .background(colors.bg)
+                // The rail sits on the trailing edge, where a rotated phone puts its
+                // navigation bar or display cutout.
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            PageIndicator(vm, vertical = true)
+            ToolbarSeparator()
+            PptToolButtons(vm, onShowSlides)
+        }
+    }
+}
+
+/** The slide picker, behind the Slides button rather than permanently on screen. */
+@Composable
+private fun SlidesSheet(vm: PptEditorViewModel, onDismiss: () -> Unit) {
+    KernBottomSheet(onDismiss = onDismiss, title = "Slides") {
+        ThumbnailRail(vm, onPick = { index ->
+            vm.goToSlide(index)
+            onDismiss()
+        })
     }
 }
 
 @Composable
-private fun SlideEditor(vm: PptEditorViewModel, hue: Color, modifier: Modifier) {
+private fun SlideEditor(
+    vm: PptEditorViewModel,
+    hue: Color,
+    landscape: Boolean,
+    onShowSlides: () -> Unit,
+    modifier: Modifier,
+) {
     val colors = KernTheme.colors
     val viewport = remember { SlideViewport() }
     Box(modifier.background(colors.sunken)) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            SlideCanvas(vm, viewport, Modifier.weight(1f).fillMaxWidth())
-            PageIndicator(vm)
-            ThumbnailRail(vm)
+        if (landscape) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                SlideCanvas(vm, viewport, Modifier.weight(1f).fillMaxHeight())
+                PptSideRail(vm, onShowSlides)
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
+                SlideCanvas(vm, viewport, Modifier.weight(1f).fillMaxWidth())
+                PageIndicator(vm)
+            }
         }
         if (viewport.isTransformed) {
-            ZoomBadge(viewport.zoom, hue, Modifier.align(Alignment.TopEnd))
+            ZoomBadge(viewport.zoom, hue, Modifier.align(Alignment.TopStart))
         }
     }
 }
@@ -382,28 +470,32 @@ private fun SlideTextShape(
     }
 }
 
-/** Previous / "n / total" / next slide indicator. */
+/**
+ * Previous / "n / total" / next. A row under the canvas in portrait; stacked in the side
+ * rail in landscape, where the chevrons keep their direction because previous and next
+ * do not change meaning when the bar turns.
+ */
 @Composable
-private fun PageIndicator(vm: PptEditorViewModel) {
+private fun PageIndicator(vm: PptEditorViewModel, vertical: Boolean = false) {
     val colors = KernTheme.colors
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val previous = @Composable {
         KernIconButton(
             KernIcons.ChevronLeft,
             "Previous slide",
             onClick = { vm.previousSlide() },
             enabled = vm.currentSlide > 0,
         )
+    }
+    val counter = @Composable {
         Text(
             text = "${if (vm.slideCount == 0) 0 else vm.currentSlide + 1} / ${vm.slideCount}",
             style = KernType.meta.copy(fontSize = 13.sp),
             color = colors.textMid,
             textAlign = TextAlign.Center,
-            modifier = Modifier.width(PageIndicatorMinWidth),
+            modifier = if (vertical) Modifier else Modifier.width(PageIndicatorMinWidth),
         )
+    }
+    val next = @Composable {
         KernIconButton(
             KernIcons.Chevron,
             "Next slide",
@@ -411,11 +503,24 @@ private fun PageIndicator(vm: PptEditorViewModel) {
             enabled = vm.currentSlide < vm.slideCount - 1,
         )
     }
+    if (vertical) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            previous(); counter(); next()
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            previous(); counter(); next()
+        }
+    }
 }
 
-/** Horizontally scrollable rail of numbered slide tiles; tapping jumps to a slide, long-press opens actions. */
+/** Horizontally scrollable rail of numbered slide tiles; tapping picks a slide, long-press opens actions. */
 @Composable
-private fun ThumbnailRail(vm: PptEditorViewModel) {
+private fun ThumbnailRail(vm: PptEditorViewModel, onPick: (Int) -> Unit) {
     val colors = KernTheme.colors
     LazyRow(
         modifier = Modifier
@@ -438,7 +543,7 @@ private fun ThumbnailRail(vm: PptEditorViewModel) {
                     )
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { vm.goToSlide(i) },
+                            onTap = { onPick(i) },
                             onLongPress = {
                                 vm.actionSlideIndex = i
                                 vm.showSlideActions = true
