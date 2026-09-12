@@ -3,11 +3,17 @@ package dev.kern.editors.pptx
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.CompositionLocalProvider
@@ -98,10 +106,8 @@ private val SlideCanvasPadding = 16.dp
 private const val SelectedOutlineWidth = 1.5f
 
 // Where a shape goes when the file declares no geometry for it, in slide points.
-private const val FallbackShapeInset = 50f
-private const val FallbackShapeStep = 60f
-private const val FallbackShapeWidth = 300f
-private const val FallbackShapeHeight = 50f
+/** Corner handle diameter in screen dp; the move grip is derived from it. */
+private const val ShapeHandleSize = 22f
 
 // Thumbnail rail tile dimensions (~92x52).
 private val ThumbWidth = 92.dp
@@ -178,6 +184,22 @@ fun PptEditorScreen(
                 vm.showFontSizeSheet = false
             },
             onDismiss = { vm.showFontSizeSheet = false },
+        )
+    }
+
+    if (vm.showAlignSheet) {
+        PptAlignPicker(
+            current = vm.caretAlignment,
+            currentAnchor = vm.caretAnchor,
+            onPick = {
+                vm.setAlignment(it)
+                vm.showAlignSheet = false
+            },
+            onPickAnchor = {
+                vm.setAnchor(it)
+                vm.showAlignSheet = false
+            },
+            onDismiss = { vm.showAlignSheet = false },
         )
     }
 
@@ -274,6 +296,83 @@ private fun PptToolButtons(vm: PptEditorViewModel, onShowSlides: () -> Unit) {
         active = caret.colorHex != null,
         enabled = hasSelection,
     )
+    ToolbarButton(
+        icon = when (vm.caretAlignment) {
+            TextAlign.Center -> KernIcons.AlignCenter
+            TextAlign.Right, TextAlign.End -> KernIcons.AlignRight
+            TextAlign.Justify -> KernIcons.AlignJustify
+            else -> KernIcons.AlignLeft
+        },
+        contentDescription = "Paragraph alignment",
+        onClick = { vm.showAlignSheet = true },
+        enabled = hasSelection,
+    )
+}
+
+/**
+ * Paragraph alignment (where each line sits across the box) and anchor (where the
+ * text as a whole sits down the box), the current choice of each marked.
+ */
+@Composable
+private fun PptAlignPicker(
+    current: TextAlign?,
+    currentAnchor: String?,
+    onPick: (TextAlign) -> Unit,
+    onPickAnchor: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = KernTheme.colors
+    val horizontal = listOf(
+        Triple(TextAlign.Left, KernIcons.AlignLeft, "Left"),
+        Triple(TextAlign.Center, KernIcons.AlignCenter, "Center"),
+        Triple(TextAlign.Right, KernIcons.AlignRight, "Right"),
+        Triple(TextAlign.Justify, KernIcons.AlignJustify, "Justify"),
+    )
+    val vertical = listOf(
+        Triple("t", KernIcons.AlignTop, "Top"),
+        Triple("ctr", KernIcons.AlignMiddle, "Middle"),
+        Triple("b", KernIcons.AlignBottom, "Bottom"),
+    )
+
+    @Composable
+    fun option(selected: Boolean, icon: ImageVector, label: String, onClick: () -> Unit) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .background(if (selected) colors.accentSoft else Color.Transparent)
+                .padding(horizontal = 22.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = if (selected) colors.accent else colors.text)
+            Text(label, style = KernType.body, color = if (selected) colors.accent else colors.text, modifier = Modifier.weight(1f))
+            if (selected) Text("\u2713", style = KernType.body, color = colors.accent)
+        }
+    }
+
+    @Composable
+    fun heading(text: String) {
+        Text(
+            text = text,
+            style = KernType.meta,
+            color = colors.textDim,
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp),
+        )
+    }
+
+    KernBottomSheet(onDismiss = onDismiss, title = "Alignment") {
+        Column(Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
+            heading("Paragraph")
+            horizontal.forEach { (align, icon, label) ->
+                option(current == align || (current == null && align == TextAlign.Left), icon, label) { onPick(align) }
+            }
+            heading("Text in box")
+            vertical.forEach { (anchor, icon, label) ->
+                option(currentAnchor == anchor || (currentAnchor == null && anchor == "t"), icon, label) { onPickAnchor(anchor) }
+            }
+        }
+    }
 }
 
 /**
@@ -429,8 +528,6 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
     val slideState = vm.currentSlideState
     val slideW = slideState?.width?.takeIf { it > 0f } ?: DefaultSlideWidth
     val slideH = slideState?.height?.takeIf { it > 0f } ?: DefaultSlideHeight
-    val slideBackground = slideState?.backgroundColorHex?.let { parseHex(it) }
-        ?: if (colors.dark) SlideDarkBackground else Color.White
     val shape = RoundedCornerShape(KernRadius.base)
 
     BoxWithConstraints(modifier.padding(SlideCanvasPadding)) {
@@ -463,9 +560,9 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
                     }
                     .shadow(SlideElevation, shape)
                     .clip(shape)
-                    .background(slideBackground)
                     .border(1.dp, colors.borderSoft, shape)
             ) {
+                SlideBackground(slideState?.background, Modifier.fillMaxSize())
                 // The slide is laid out at its on-screen size, not laid out at natural
                 // size and scaled at draw time. A drawn scale is invisible to the text
                 // cursor handle and the text toolbar, which are popups anchored in
@@ -476,29 +573,53 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
                 // its true on-screen size.
                 CompositionLocalProvider(
                     LocalDensity provides Density(density.density * scale, density.fontScale),
-                    // No teardrop: the caret itself marks the insertion point. Selection
-                    // keeps its highlight; only the draggable handles go.
+                    // One colour serves both the caret's drop handle and the two
+                    // selection handles, and hiding it took the selection handles with
+                    // it, leaving no way to extend a selection past one word. So the
+                    // handles stay, in the accent, and now that the slide is laid out at
+                    // screen scale they land where the text is.
                     LocalTextSelectionColors provides TextSelectionColors(
-                        handleColor = Color.Transparent,
+                        handleColor = colors.accent,
                         backgroundColor = colors.accent.copy(alpha = 0.35f),
                     ),
                 ) {
                     Box(Modifier.fillMaxSize()) {
                         // Beneath the text, so a text box always wins a tap.
-                        SlideDecorationLayer(vm.currentDecorations, Modifier.fillMaxSize())
+                        val decorations = vm.currentDecorations
+                        SlideDecorationLayer(decorations, Modifier.fillMaxSize())
+                        // Tap targets for the decorations, still beneath the text.
+                        // Selecting one drops the keyboard: there is nothing to type into.
+                        val focusManager = LocalFocusManager.current
+                        decorations.forEachIndexed { i, state ->
+                            val b = state.bounds
+                            Box(
+                                Modifier
+                                    .offset(x = b.x.dp, y = b.y.dp)
+                                    .size(width = b.width.dp, height = b.height.dp)
+                                    .pointerInput(i) {
+                                        detectTapGestures {
+                                            focusManager.clearFocus()
+                                            vm.selectDecoration(i)
+                                        }
+                                    },
+                            )
+                        }
 
                         val shapes = vm.currentShapes
-                        if (shapes.isEmpty() && vm.currentDecorations.isEmpty()) {
+                        if (shapes.isEmpty() && decorations.isEmpty()) {
                             Text(
                                 text = "Blank slide. Add a text box from the toolbar.",
                                 style = KernType.body.copy(fontSize = SlideTextSize),
-                                color = colors.text.copy(alpha = 0.5f),
+                                color = (slideState?.textColorHex?.let { parseHex(it) } ?: Color.Black).copy(alpha = 0.5f),
                                 modifier = Modifier.align(Alignment.Center),
                             )
                         } else {
                             shapes.forEachIndexed { i, shapeState ->
                                 SlideTextShape(vm, i, shapeState, scale)
                             }
+                        }
+                        vm.selectedDecorationIndex?.let { i ->
+                            decorations.getOrNull(i)?.let { SelectedDecoration(vm, i, it, scale) }
                         }
                     }
                 }
@@ -510,9 +631,12 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
 /**
  * One editable text shape, positioned in the slide's coordinate space.
  *
- * A shape the file gives no geometry for is staggered by its index rather than dropped
- * at a fixed spot, so several of them stay separately reachable instead of covering
- * one another exactly.
+ * Selecting it shows four corner handles that resize against the opposite corner and
+ * a grip above the top edge that moves it. The grip is separate from the body because
+ * the body is a text field: a drag there places the caret and selects text, as it
+ * should, so moving needs a target of its own. Handles are sized in screen pixels,
+ * dividing by the canvas scale, so they stay thumb-sized however far out the slide is
+ * zoomed.
  */
 @Composable
 private fun SlideTextShape(
@@ -523,46 +647,168 @@ private fun SlideTextShape(
 ) {
     val colors = KernTheme.colors
     val isSelected = vm.selectedShapeIndex == index
-    val bounds = shapeState.bounds ?: PptDocument.ShapeBounds(
-        x = FallbackShapeInset,
-        y = FallbackShapeInset + index * FallbackShapeStep,
-        width = FallbackShapeWidth,
-        height = FallbackShapeHeight,
-    )
+    val bounds = shapeState.bounds
     val outline = RoundedCornerShape(KernRadius.innerSmall)
+    // The field wraps its text, so the empty part of an anchored box is not the field;
+    // a tap there still has to start editing.
+    val focusRequester = remember { FocusRequester() }
+    val interaction = remember { MutableInteractionSource() }
 
     Box(
         modifier = Modifier
             .offset(x = bounds.x.dp, y = bounds.y.dp)
-            .size(width = bounds.width.dp, height = bounds.height.dp)
-            .clip(outline)
-            .background(if (isSelected) colors.accentSoft.copy(alpha = 0.25f) else Color.Transparent)
-            // Dp inside the slide is scaled with it; dividing by the canvas scale keeps
-            // the selection outline at the same apparent weight at every zoom.
-            .border(
-                width = if (isSelected) (SelectedOutlineWidth / scale).dp else 0.dp,
-                color = if (isSelected) colors.accent else Color.Transparent,
-                shape = outline,
-            )
-            .padding(4.dp),
+            .size(width = bounds.width.dp, height = bounds.height.dp),
     ) {
-        BasicTextField(
-            value = shapeState.textValue,
-            onValueChange = {
-                vm.selectShape(index)
-                vm.updateShapeValue(index, it)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = interaction, indication = null) {
+                    vm.selectShape(index)
+                    focusRequester.requestFocus()
+                }
+                .clip(outline)
+                .background(if (isSelected) colors.accentSoft.copy(alpha = 0.25f) else Color.Transparent)
+                // Dp inside the slide is scaled with it; dividing by the canvas scale keeps
+                // the selection outline at the same apparent weight at every zoom.
+                .border(
+                    width = if (isSelected) (SelectedOutlineWidth / scale).dp else 0.dp,
+                    color = if (isSelected) colors.accent else Color.Transparent,
+                    shape = outline,
+                )
+                .padding(4.dp),
+            // Where the text sits down the box: the field wraps its content and the
+            // box places it, as PowerPoint's anchor does.
+            contentAlignment = when (shapeState.anchor) {
+                "ctr" -> Alignment.CenterStart
+                "b" -> Alignment.BottomStart
+                else -> Alignment.TopStart
             },
-            // The base for a run that names no font. A neutral system sans, not the
-            // app's own display face: this is document content, and it has to sit
-            // consistently beside runs whose named font maps to the same generic.
-            textStyle = TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontSize = SlideTextSize,
-                color = colors.text,
-            ),
-            cursorBrush = SolidColor(colors.accent),
-            modifier = Modifier.fillMaxSize(),
+        ) {
+            BasicTextField(
+                value = shapeState.textValue,
+                onValueChange = {
+                    vm.selectShape(index)
+                    vm.updateShapeValue(index, it)
+                },
+                // The base for a run that names no font. A neutral system sans, not the
+                // app's own display face: this is document content, and it has to sit
+                // consistently beside runs whose named font maps to the same generic.
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = SlideTextSize,
+                    // The deck's inherited colour, not the app's: a slide is white unless the
+                    // file says otherwise, whatever theme the app is in.
+                    color = shapeState.defaultColorHex?.let { parseHex(it) } ?: colors.text,
+                ),
+                cursorBrush = SolidColor(colors.accent),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            )
+        }
+
+        if (isSelected) {
+            SelectionHandles(
+                key = index,
+                scale = scale,
+                onStart = { vm.beginShapeDrag(index) },
+                onResize = { left, top, dx, dy -> vm.resizeShape(index, left, top, dx, dy) },
+                onMove = { dx, dy -> vm.moveShape(index, dx, dy) },
+            )
+        }
+    }
+}
+
+/**
+ * Four corner handles that resize against the opposite corner and a grip above the
+ * top edge that moves, laid over whatever box they are placed in. Sized in screen
+ * pixels, dividing by the canvas scale, so they stay thumb-sized at any zoom.
+ */
+@Composable
+private fun BoxScope.SelectionHandles(
+    key: Any,
+    scale: Float,
+    onStart: () -> Unit,
+    onResize: (left: Boolean, top: Boolean, dx: Float, dy: Float) -> Unit,
+    onMove: (dx: Float, dy: Float) -> Unit,
+) {
+    val colors = KernTheme.colors
+    val handle = (ShapeHandleSize / scale).dp
+    val corners = listOf(
+        Triple(Alignment.TopStart, true, true),
+        Triple(Alignment.TopEnd, false, true),
+        Triple(Alignment.BottomStart, true, false),
+        Triple(Alignment.BottomEnd, false, false),
+    )
+    for ((alignment, left, top) in corners) {
+        Box(
+            modifier = Modifier
+                .align(alignment)
+                // Centred on the corner, so half of it sits inside the shape.
+                .offset(x = if (left) -handle / 2 else handle / 2, y = if (top) -handle / 2 else handle / 2)
+                .size(handle)
+                .shapeDrag(key, scale, onStart) { dx, dy -> onResize(left, top, dx, dy) }
+                .background(colors.accent, CircleShape)
+                .border((1.5f / scale).dp, colors.bg, CircleShape),
         )
+    }
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .offset(y = -handle * 1.75f)
+            .size(width = handle * 2, height = handle * 1.2f)
+            .shapeDrag(key, scale, onStart, onMove)
+            .background(colors.accent, RoundedCornerShape(50))
+            .border((1.5f / scale).dp, colors.bg, RoundedCornerShape(50)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = KernIcons.Move,
+            contentDescription = "Move",
+            tint = colors.bg,
+            modifier = Modifier.size(handle * 0.8f),
+        )
+    }
+}
+
+/**
+ * The selection of a picture, drawn shape, table or placeholder: an outline with the
+ * same handles a text box gets. Drawn above the text shapes so the handles are always
+ * reachable, whatever overlaps the decoration.
+ */
+@Composable
+private fun SelectedDecoration(vm: PptEditorViewModel, index: Int, state: PptEditorViewModel.DecorationState, scale: Float) {
+    val colors = KernTheme.colors
+    val bounds = state.bounds
+    Box(
+        modifier = Modifier
+            .offset(x = bounds.x.dp, y = bounds.y.dp)
+            .size(width = bounds.width.dp, height = bounds.height.dp)
+            .border((SelectedOutlineWidth / scale).dp, colors.accent, RoundedCornerShape(KernRadius.innerSmall)),
+    ) {
+        SelectionHandles(
+            key = "decoration$index",
+            scale = scale,
+            onStart = { vm.beginDecorationDrag(index) },
+            onResize = { left, top, dx, dy -> vm.resizeDecoration(index, left, top, dx, dy) },
+            onMove = { dx, dy -> vm.moveDecoration(index, dx, dy) },
+        )
+    }
+}
+
+/**
+ * A drag that reports its deltas in slide points. Pixels are divided by the density in
+ * force at the node, which inside the slide is the scaled one, so a point here is a
+ * point of slide geometry whatever the zoom. Keyed on [scale] so a zoom restarts the
+ * gesture with the new conversion instead of finishing it with the old.
+ */
+private fun Modifier.shapeDrag(
+    key: Any,
+    scale: Float,
+    onStart: () -> Unit,
+    onDrag: (dx: Float, dy: Float) -> Unit,
+): Modifier = pointerInput(key, scale) {
+    detectDragGestures(onDragStart = { onStart() }) { change, dragAmount ->
+        change.consume()
+        onDrag(dragAmount.x / density, dragAmount.y / density)
     }
 }
 

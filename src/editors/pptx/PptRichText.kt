@@ -3,12 +3,14 @@ package dev.kern.editors.pptx
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
 
@@ -17,14 +19,90 @@ import androidx.compose.ui.unit.sp
  */
 object PptRichText {
 
-    fun toAnnotated(runs: List<PptDocument.ShapeRun>): AnnotatedString = buildAnnotatedString {
-        for (run in runs) {
-            val start = length
-            append(run.text)
-            val span = spanOf(run.style)
-            if (span != SpanStyle()) addStyle(span, start, length)
-            run.style.fontFamily?.let { addStringAnnotation("fontFamily", it, start, length) }
+    /**
+     * Styled text from runs, with one paragraph style per paragraph from [alignments]
+     * (one entry per paragraph, in order; null for a paragraph with no alignment). A
+     * paragraph's range includes its trailing newline, which is what keeps Compose
+     * from treating the newline as a paragraph of its own.
+     */
+    fun toAnnotated(runs: List<PptDocument.ShapeRun>, alignments: List<TextAlign?> = emptyList()): AnnotatedString {
+        val text = buildAnnotatedString {
+            for (run in runs) {
+                val start = length
+                append(run.text)
+                val span = spanOf(run.style)
+                if (span != SpanStyle()) addStyle(span, start, length)
+                run.style.fontFamily?.let { addStringAnnotation("fontFamily", it, start, length) }
+            }
         }
+        return withAlignments(text, alignments)
+    }
+
+    /** [text] with its paragraph styles replaced by [alignments], one per paragraph. */
+    private fun withAlignments(text: AnnotatedString, alignments: List<TextAlign?>): AnnotatedString {
+        if (alignments.all { it == null }) return AnnotatedString(text.text, text.spanStyles, emptyList())
+        val paragraphs = ArrayList<AnnotatedString.Range<ParagraphStyle>>()
+        paragraphRanges(text.text).forEachIndexed { i, range ->
+            val align = alignments.getOrNull(i) ?: return@forEachIndexed
+            if (range.last >= range.first) {
+                paragraphs += AnnotatedString.Range(ParagraphStyle(textAlign = align), range.first, range.last + 1)
+            }
+        }
+        return AnnotatedString(text.text, text.spanStyles, paragraphs)
+    }
+
+    /** Each paragraph's character range, the trailing newline included; may be empty. */
+    private fun paragraphRanges(text: String): List<IntRange> {
+        val out = ArrayList<IntRange>()
+        var start = 0
+        while (true) {
+            val newline = text.indexOf('\n', start)
+            if (newline < 0) {
+                out += start until text.length
+                return out
+            }
+            out += start..newline
+            start = newline + 1
+        }
+    }
+
+    /** The alignment of each paragraph of [text], null where none is set. */
+    fun paragraphAlignments(text: AnnotatedString): List<TextAlign?> =
+        paragraphRanges(text.text).map { range -> alignmentAt(text, range.first) }
+
+    private fun alignmentAt(text: AnnotatedString, offset: Int): TextAlign? =
+        text.paragraphStyles.firstOrNull { offset >= it.start && (offset < it.end || (it.start == it.end && offset == it.start)) }
+            ?.item?.textAlign?.takeIf { it != TextAlign.Unspecified }
+
+    /** Aligns every paragraph that the selection touches. */
+    fun alignParagraphs(value: TextFieldValue, align: TextAlign): TextFieldValue {
+        val text = value.annotatedString
+        val selection = value.selection
+        val ranges = paragraphRanges(text.text)
+        val current = paragraphAlignments(text)
+        val updated = ranges.mapIndexed { i, range ->
+            // A paragraph is touched when the selection overlaps it, and a collapsed
+            // caret touches the paragraph it sits in, including an empty last one.
+            val touched = selection.min <= range.last + 1 && selection.max >= range.first
+            if (touched) align else current[i]
+        }
+        return value.copy(annotatedString = withAlignments(text, updated))
+    }
+
+    fun toOoxmlAlign(align: TextAlign?): String? = when (align) {
+        TextAlign.Center -> "ctr"
+        TextAlign.Right, TextAlign.End -> "r"
+        TextAlign.Justify -> "just"
+        TextAlign.Left, TextAlign.Start -> "l"
+        else -> null
+    }
+
+    fun fromOoxmlAlign(token: String?): TextAlign? = when (token) {
+        "ctr" -> TextAlign.Center
+        "r" -> TextAlign.Right
+        "just", "justLow", "dist", "thaiDist" -> TextAlign.Justify
+        "l" -> TextAlign.Left
+        else -> null
     }
 
     fun toRuns(text: AnnotatedString): List<PptDocument.ShapeRun> {
@@ -44,6 +122,109 @@ object PptRichText {
         return collapse(out)
     }
 
+    /**
+     * The styled text after an edit the text field reported as plain text.
+     *
+     * The legacy `BasicTextField` keeps its buffer as a plain string and hands back
+     * `AnnotatedString(toString())` on every edit, so each keystroke arrives with no
+     * spans at all. Taking that value as the new text would strip the whole shape of
+     * its formatting one character at a time. Instead the edit is located as the
+     * region between the longest common prefix and suffix of [before] and [after],
+     * the untouched text keeps its runs, and the inserted text takes the style of
+     * the character before it, as a word processor does, transformed by [pending] if
+     * a formatting command is waiting for the next keystroke.
+     */
+    fun mergeEdit(
+        before: AnnotatedString,
+        after: String,
+        pending: ((PptDocument.RunStyle) -> PptDocument.RunStyle)? = null,
+    ): AnnotatedString {
+        val old = before.text
+        if (old == after) return before
+        var prefix = 0
+        val maxPrefix = minOf(old.length, after.length)
+        while (prefix < maxPrefix && old[prefix] == after[prefix]) prefix++
+        var suffix = 0
+        val maxSuffix = minOf(old.length, after.length) - prefix
+        while (suffix < maxSuffix && old[old.length - 1 - suffix] == after[after.length - 1 - suffix]) suffix++
+
+        val runs = toRuns(before)
+        val inserted = after.substring(prefix, after.length - suffix)
+        val kept = ArrayList<PptDocument.ShapeRun>()
+        kept += sliceRuns(runs, 0, prefix)
+        if (inserted.isNotEmpty()) {
+            val base = styleAtOffset(runs, if (prefix > 0) prefix - 1 else 0)
+            kept += PptDocument.ShapeRun(inserted, pending?.invoke(base) ?: base)
+        }
+        kept += sliceRuns(runs, old.length - suffix, old.length)
+        // Each new paragraph keeps the alignment of the old character its first
+        // character came from; a paragraph born inside the insertion takes the one
+        // before the edit, which is what pressing Enter does in any editor.
+        val shift = after.length - old.length
+        val alignments = paragraphRanges(after).map { range ->
+            val start = range.first
+            val oldIndex = when {
+                start < prefix -> start
+                start >= after.length - suffix -> start - shift
+                else -> (prefix - 1).coerceAtLeast(0)
+            }
+            alignmentAt(before, oldIndex.coerceIn(0, old.length))
+        }
+        return toAnnotated(collapse(kept), alignments)
+    }
+
+    /** The runs covering [from, to) of the text the runs spell out, cut at the ends. */
+    private fun sliceRuns(runs: List<PptDocument.ShapeRun>, from: Int, to: Int): List<PptDocument.ShapeRun> {
+        if (to <= from) return emptyList()
+        val out = ArrayList<PptDocument.ShapeRun>()
+        var pos = 0
+        for (run in runs) {
+            val start = pos
+            val end = pos + run.text.length
+            pos = end
+            if (end <= from || start >= to) continue
+            out += run.copy(text = run.text.substring(maxOf(from, start) - start, minOf(to, end) - start))
+        }
+        return out
+    }
+
+    /** The style of the character at [offset], or of the last run when past the end. */
+    private fun styleAtOffset(runs: List<PptDocument.ShapeRun>, offset: Int): PptDocument.RunStyle {
+        var pos = 0
+        for (run in runs) {
+            val end = pos + run.text.length
+            if (offset < end) return run.style
+            pos = end
+        }
+        return runs.lastOrNull()?.style ?: PptDocument.RunStyle()
+    }
+
+    /**
+     * The range a formatting command applies to when nothing is highlighted: the word
+     * around the caret, or null when the caret sits at a boundary, where the command
+     * should wait for the next keystroke instead.
+     */
+    fun wordAt(text: String, offset: Int): IntRange? {
+        fun inWord(i: Int) = i in text.indices && (text[i].isLetterOrDigit() || text[i] == '\'')
+        if (!inWord(offset - 1) || !inWord(offset)) return null
+        var start = offset
+        while (inWord(start - 1)) start--
+        var end = offset
+        while (inWord(end)) end++
+        return start until end
+    }
+
+    /** Restyles [from, to) of the text. */
+    fun restyleRange(
+        value: TextFieldValue,
+        from: Int,
+        to: Int,
+        transform: (PptDocument.RunStyle) -> PptDocument.RunStyle,
+    ): TextFieldValue {
+        val restyled = reStyleRange(toRuns(value.annotatedString), from, to, transform)
+        return value.copy(annotatedString = toAnnotated(restyled, paragraphAlignments(value.annotatedString)))
+    }
+
     fun styleAt(value: TextFieldValue): PptDocument.RunStyle {
         val runs = toRuns(value.annotatedString)
         val sel = value.selection
@@ -55,19 +236,6 @@ object PptRichText {
             pos = end
         }
         return runs.lastOrNull()?.style ?: PptDocument.RunStyle()
-    }
-
-    fun restyleSelection(
-        value: TextFieldValue,
-        transform: (PptDocument.RunStyle) -> PptDocument.RunStyle,
-    ): TextFieldValue {
-        val sel = value.selection
-        val runs = toRuns(value.annotatedString)
-        val total = value.annotatedString.text.length
-        val from = if (sel.collapsed) 0 else sel.min
-        val to = if (sel.collapsed) total else sel.max
-        val restyled = reStyleRange(runs, from, to, transform)
-        return value.copy(annotatedString = toAnnotated(restyled))
     }
 
     private fun spanOf(s: PptDocument.RunStyle): SpanStyle {

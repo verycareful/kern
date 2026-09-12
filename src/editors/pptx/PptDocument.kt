@@ -1,6 +1,14 @@
 package dev.kern.editors.pptx
 
 import org.apache.poi.xslf.usermodel.XMLSlideShow
+import org.apache.poi.sl.usermodel.Placeholder
+import org.apache.poi.sl.usermodel.TextParagraph
+import org.apache.poi.sl.usermodel.VerticalAlignment
+import org.apache.poi.xslf.usermodel.XSLFSheet
+import org.openxmlformats.schemas.presentationml.x2006.main.CTCommonSlideData
+import org.openxmlformats.schemas.presentationml.x2006.main.CTSlide
+import org.openxmlformats.schemas.presentationml.x2006.main.CTSlideLayout
+import org.openxmlformats.schemas.presentationml.x2006.main.CTSlideMaster
 import org.apache.poi.xslf.usermodel.XSLFGraphicFrame
 import org.apache.poi.xslf.usermodel.XSLFGroupShape
 import org.apache.poi.xslf.usermodel.XSLFPictureData
@@ -12,7 +20,10 @@ import org.apache.poi.xslf.usermodel.XSLFTextParagraph
 import org.apache.poi.xslf.usermodel.XSLFTextRun
 import org.apache.poi.xslf.usermodel.XSLFTextShape
 import org.apache.xmlbeans.XmlObject
-import org.openxmlformats.schemas.drawingml.x2006.main.CTSRgbColor
+import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun
+import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph
+import org.openxmlformats.schemas.drawingml.x2006.main.STTextAlignType
+import org.openxmlformats.schemas.drawingml.x2006.main.STTextAnchoringType
 import org.openxmlformats.schemas.presentationml.x2006.main.CTConnector
 import org.openxmlformats.schemas.presentationml.x2006.main.CTGraphicalObjectFrame
 import org.openxmlformats.schemas.presentationml.x2006.main.CTPicture
@@ -49,11 +60,44 @@ object PptDocument {
 
     data class ShapeBounds(val x: Float, val y: Float, val width: Float, val height: Float)
 
+    /** How a surface is painted: a slide background or an autoshape's interior. */
+    sealed interface Fill
+
+    /** Six hex digits, or eight with alpha first, no hash. */
+    data class SolidFill(val hex: String) : Fill
+
+    data class GradientStop(val position: Float, val color: String)
+
+    /** A linear gradient; [angleDegrees] is DrawingML's, 0 pointing right and 90 down. */
+    data class GradientFill(val stops: List<GradientStop>, val angleDegrees: Float) : Fill
+
+    /** An image covering the surface, cropped to it. */
+    class PictureFill(val bytes: ByteArray, val fileName: String?) : Fill {
+        override fun equals(other: Any?): Boolean =
+            other is PictureFill && bytes.contentEquals(other.bytes) && fileName == other.fileName
+
+        override fun hashCode(): Int = 31 * bytes.contentHashCode() + (fileName?.hashCode() ?: 0)
+    }
+
+    /** A shape's border: colour as hex, width in points. */
+    data class Outline(val colorHex: String, val width: Float)
+
     data class TextShapeModel(
         val shapeIndex: Int,
         val text: String,
         val runs: List<ShapeRun>,
         val bounds: ShapeBounds?,
+        /**
+         * The colour a run with no colour of its own is shown in: the shape's font
+         * reference, the placeholder's list style, the master's text styles, or the
+         * theme's text colour, whichever the hierarchy reaches first. Display only; it
+         * is never written back, so the inheritance stays intact in the file.
+         */
+        val defaultColorHex: String? = null,
+        /** The effective alignment of each paragraph as an OOXML token (l, ctr, r, just), or null. */
+        val alignments: List<String?> = emptyList(),
+        /** Where the text sits in the box, as the OOXML anchor token (t, ctr, b), or null. */
+        val anchor: String? = null,
     )
 
     enum class PresetLayout {
@@ -114,15 +158,15 @@ object PptDocument {
      *
      * [preset] is the DrawingML preset name (`roundRect`, `rightArrow`, ...) and the
      * renderer decides whether it knows the outline; [adjustments] are the shape's own
-     * `avLst` guides, keyed by name, in DrawingML's 1/100000 units. Colours are sRGB hex
-     * without a hash; a null fill or outline means the file declares none. When the
-     * shape also carries text, that text is a separate editable shape drawn on top.
+     * `avLst` guides, keyed by name, in DrawingML's 1/100000 units. A null fill or
+     * outline means the shape has none, after its own properties and its theme style
+     * references have both been consulted. When the shape also carries text, that text
+     * is a separate editable shape drawn on top.
      */
     data class GeometryDecoration(
         val preset: String,
-        val fillHex: String?,
-        val lineHex: String?,
-        val lineWidth: Float,
+        val fill: Fill?,
+        val outline: Outline?,
         val adjustments: Map<String, Int>,
         override val bounds: ShapeBounds?,
     ) : SlideDecoration
@@ -142,8 +186,11 @@ object PptDocument {
         val shapes: List<TextShapeModel>,
         val width: Float,
         val height: Float,
-        val backgroundColorHex: String?,
+        /** The resolved background, or null for the plain white PowerPoint shows without one. */
+        val background: Fill?,
         val decorations: List<SlideDecoration> = emptyList(),
+        /** The theme's text colour on this slide, for text the editor adds. */
+        val textColorHex: String? = null,
     )
 
     /** slides[s] = the text of each text shape on slide s, in shape order. */
@@ -174,29 +221,24 @@ object PptDocument {
             }
 
             for ((sIndex, slide) in ppt.slides.withIndex()) {
+                val theme = PptTheme.of(slide)
                 val textShapes = editableTextShapes(slide)
                 val shapeTexts = ArrayList<String>()
                 val shapeModels = ArrayList<TextShapeModel>()
-                
-                var bgColorHex: String? = null
-                try {
-                    val slideXml = slide.xmlObject.toString()
-                    val bgMatch = Regex("""<p:bg[^>]*>.*?<a:srgbClr\s+val="([A-Fa-f0-9]{6})"""", RegexOption.DOT_MATCHES_ALL).find(slideXml)
-                    if (bgMatch != null) {
-                        bgColorHex = "#" + bgMatch.groupValues[1]
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
 
                 for ((shapeIdx, shape) in textShapes.withIndex()) {
                     val rawText = shape.text ?: ""
                     shapeTexts.add(rawText)
-                    
+
                     val bounds = boundsOf(shape)
 
                     val runs = ArrayList<ShapeRun>()
-                    for (para in shape.textParagraphs) {
+                    val alignments = shape.textParagraphs.map { alignTokenOf(it) }
+                    for ((paraIndex, para) in shape.textParagraphs.withIndex()) {
+                        // Paragraphs are separate elements in the file; in the editor
+                        // they are one text with a newline between them, and that
+                        // newline is what the writer splits on to rebuild them.
+                        if (paraIndex > 0) runs.add(ShapeRun("\n", runs.lastOrNull()?.style ?: RunStyle()))
                         for (r in para.textRuns) {
                             val rText = r.rawText ?: ""
                             if (rText.isNotEmpty()) {
@@ -204,16 +246,12 @@ object PptDocument {
                                 val italic = r.isItalic
                                 val underline = r.isUnderlined
                                 val size = r.fontSize?.toFloat()
-                                var colorHex: String? = null
-                                try {
-                                    val rXml = r.xmlObject.toString()
-                                    val clrMatch = Regex("""<a:srgbClr\s+val="([A-Fa-f0-9]{6})"""").find(rXml)
-                                    if (clrMatch != null) {
-                                        colorHex = "#" + clrMatch.groupValues[1]
-                                    }
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                }
+                                // A theme colour on the run is resolved to sRGB here, so
+                                // a run in an edited shape is written back pinned to that
+                                // value. Runs with no colour at all stay inherited.
+                                val colorHex = (r.xmlObject as? CTRegularTextRun)?.rPr?.solidFill
+                                    ?.let { fill -> theme?.colorOf(fill) ?: fill.srgbClr?.let { PptTheme.srgbColor(it) } }
+                                    ?.let { "#$it" }
                                 val fontFamily = r.fontFamily
                                 runs.add(
                                     ShapeRun(
@@ -238,17 +276,30 @@ object PptDocument {
                             text = rawText,
                             runs = collapsed,
                             bounds = bounds,
+                            defaultColorHex = defaultTextColorOf(shape, theme),
+                            alignments = alignments,
+                            anchor = anchorTokenOf(shape),
                         ),
                     )
                 }
 
                 slidesText.add(shapeTexts)
-                slideModels.add(SlideModel(slideIndex = sIndex, shapes = shapeModels, width = slideWidth, height = slideHeight, backgroundColorHex = bgColorHex, decorations = decorationsOf(slide)))
+                slideModels.add(
+                    SlideModel(
+                        slideIndex = sIndex,
+                        shapes = shapeModels,
+                        width = slideWidth,
+                        height = slideHeight,
+                        background = backgroundOf(slide, theme),
+                        decorations = decorationsOf(slide, theme),
+                        textColorHex = theme?.slotColor("tx1"),
+                    ),
+                )
             }
 
             return Parsed(
                 slides = slidesText.ifEmpty { listOf(emptyList()) },
-                slideModels = slideModels.ifEmpty { listOf(SlideModel(0, emptyList(), 960f, 540f, null)) },
+                slideModels = slideModels.ifEmpty { listOf(SlideModel(0, emptyList(), 960f, 540f, background = null)) },
             )
         }
     }
@@ -261,13 +312,24 @@ object PptDocument {
         edits: Map<Pair<Int, Int>, String> = emptyMap(),
         slideOps: List<SlideOp> = emptyList(),
         richEdits: Map<Pair<Int, Int>, List<ShapeRun>> = emptyMap(),
+        boundsEdits: Map<Pair<Int, Int>, ShapeBounds> = emptyMap(),
+        /** Per paragraph alignment tokens for the shapes in [richEdits]. */
+        alignEdits: Map<Pair<Int, Int>, List<String?>> = emptyMap(),
+        /** New positions for decorations, keyed by (slide, index in decorationsOf). */
+        decorationBoundsEdits: Map<Pair<Int, Int>, ShapeBounds> = emptyMap(),
+        /** New vertical anchors (t, ctr, b) for text shapes. */
+        anchorEdits: Map<Pair<Int, Int>, String> = emptyMap(),
     ): ByteArray {
-        XMLSlideShow(ByteArrayInputStream(originalBytes)).use { ppt ->
+        var ppt = XMLSlideShow(ByteArrayInputStream(originalBytes))
+        try {
             // 1. Apply structural slide operations
             for (op in slideOps) {
                 when (op) {
                     is InsertSlide -> {
                         val newSlide = ppt.createSlide()
+                        // createSlide appends; the editor inserted after the current slide,
+                        // and later edits are addressed by that position.
+                        if (op.atIndex in ppt.slides.indices) ppt.setSlideOrder(newSlide, op.atIndex)
                         val tb = newSlide.createTextBox()
                         if (op.layout == PresetLayout.TITLE) {
                             tb.setText("Title")
@@ -313,6 +375,16 @@ object PptDocument {
                 }
             }
 
+            // A duplicated slide's XML is right but POI's cached shape list for it is
+            // stale (see copySlideContent), and the only rebuild path crashes on
+            // Android. Serialising and reopening rebuilds every cache the honest way,
+            // so edits made on the duplicate before this save reach the file.
+            if (slideOps.any { it is DuplicateSlide }) {
+                val snapshot = ByteArrayOutputStream().use { out -> ppt.write(out); out.toByteArray() }
+                ppt.close()
+                ppt = XMLSlideShow(ByteArrayInputStream(snapshot))
+            }
+
             // 2. Apply rich-text or plain-text edits to existing shapes
             val slides = ppt.slides
             for ((key, runs) in richEdits) {
@@ -320,7 +392,30 @@ object PptDocument {
                 if (slideIndex < 0 || slideIndex >= slides.size) continue
                 val textShapes = editableTextShapes(slides[slideIndex])
                 val shape = textShapes.getOrNull(shapeIndex) ?: continue
-                applyRunsToShape(shape, runs)
+                applyRunsToShape(shape, runs, alignEdits[key].orEmpty())
+            }
+
+            for ((key, bounds) in boundsEdits) {
+                val (slideIndex, shapeIndex) = key
+                if (slideIndex < 0 || slideIndex >= slides.size) continue
+                val shape = editableTextShapes(slides[slideIndex]).getOrNull(shapeIndex) ?: continue
+                setBounds(shape, bounds)
+            }
+
+            for ((key, anchor) in anchorEdits) {
+                val (slideIndex, shapeIndex) = key
+                if (slideIndex < 0 || slideIndex >= slides.size) continue
+                val shape = editableTextShapes(slides[slideIndex]).getOrNull(shapeIndex) ?: continue
+                val body = (shape.xmlObject as? CTShape)?.txBody ?: continue
+                (body.bodyPr ?: body.addNewBodyPr()).anchor = STTextAnchoringType.Enum.forString(anchor)
+            }
+
+            for ((key, bounds) in decorationBoundsEdits) {
+                val (slideIndex, decorationIndex) = key
+                if (slideIndex < 0 || slideIndex >= slides.size) continue
+                val slide = slides[slideIndex]
+                val shape = decorationEntries(slide, PptTheme.of(slide)).getOrNull(decorationIndex)?.first ?: continue
+                setBoundsOfXml(shape.xmlObject, bounds)
             }
 
             for ((key, text) in edits) {
@@ -335,6 +430,8 @@ object PptDocument {
                 ppt.write(out)
                 return out.toByteArray()
             }
+        } finally {
+            ppt.close()
         }
     }
 
@@ -356,7 +453,8 @@ object PptDocument {
             .filterNot { it.text.isNullOrBlank() && isFilledArtwork(it) }
 
     private fun isFilledArtwork(shape: XSLFShape): Boolean =
-        fillPictureOf(shape) != null || geometryOf(shape)?.fillHex != null
+        fillPictureOf(shape) != null ||
+            geometryOf(shape, (shape.sheet as? XSLFSlide)?.let { PptTheme.of(it) })?.fill != null
 
     /**
      * The image a shape is filled with, resolved through the sheet's relationships.
@@ -381,24 +479,42 @@ object PptDocument {
 
     /**
      * The preset geometry and paint of an autoshape, or null when there is nothing to
-     * draw: no preset, or neither a fill nor an outline declared on the shape itself.
+     * draw: no preset, or neither a fill nor an outline once the shape's own properties
+     * and its `p:style` references into the theme have both been read.
      *
-     * Only what the shape declares directly is read. A fill or outline inherited through
-     * `p:style` references into the theme, and a `schemeClr` in place of an sRGB value,
-     * both need the theme resolver that slide backgrounds also wait on, so they are
-     * treated as absent for now rather than guessed.
+     * The shape's own `spPr` wins over the style: an explicit fill, gradient or
+     * `noFill` replaces the `fillRef`, and an `a:ln` that names a colour or `noFill`
+     * replaces the `lnRef`. An `a:ln` that only sets a width keeps the referenced
+     * colour, which is how PowerPoint writes "same outline, thicker".
      */
-    private fun geometryOf(shape: XSLFShape): GeometryDecoration? {
+    private fun geometryOf(shape: XSLFShape, theme: PptTheme?): GeometryDecoration? {
         val xml = shape.xmlObject as? CTShape ?: return null
         val spPr = xml.spPr ?: return null
         val geom = spPr.prstGeom ?: return null
         val preset = geom.prst?.toString() ?: return null
-        val fillHex = spPr.solidFill?.srgbClr?.let { hexOf(it) }
+        val style = xml.style
+
+        val fill = when {
+            spPr.noFill != null -> null
+            spPr.solidFill != null || spPr.gradFill != null ->
+                theme?.fillOf(spPr.solidFill, spPr.gradFill)
+                    ?: spPr.solidFill?.srgbClr?.let { PptTheme.srgbColor(it) }?.let { SolidFill(it) }
+            else -> style?.fillRef?.let { ref -> theme?.fillStyle(ref.idx, theme.refColor(ref.srgbClr, ref.schemeClr)) }
+        }
+
         val line = spPr.ln
-        val lineHex = line?.solidFill?.srgbClr?.let { hexOf(it) }
-        if (fillHex == null && lineHex == null) return null
-        // DrawingML's default outline is 9525 EMU, three quarters of a point.
-        val lineWidth = if (line != null && line.isSetW) line.w / EmuPerPoint else 0.75f
+        val outline = when {
+            line?.noFill != null -> null
+            line?.solidFill != null -> {
+                val color = theme?.colorOf(line.solidFill) ?: line.solidFill.srgbClr?.let { PptTheme.srgbColor(it) }
+                color?.let { Outline(it, PptTheme.lineWidthOf(line)) }
+            }
+            else -> style?.lnRef
+                ?.let { ref -> theme?.lineStyle(ref.idx, theme.refColor(ref.srgbClr, ref.schemeClr)) }
+                ?.let { if (line != null && line.isSetW) it.copy(width = PptTheme.lineWidthOf(line)) else it }
+        }
+        if (fill == null && outline == null) return null
+
         val adjustments = geom.avLst?.gdList.orEmpty().mapNotNull { guide ->
             val name = guide.name ?: return@mapNotNull null
             // Adjust guides are always literal: "val 16667".
@@ -406,11 +522,71 @@ object PptDocument {
             name to value
         }.toMap()
         val bounds = (shape as? XSLFTextShape)?.let { boundsOf(it) } ?: boundsOfXml(xml)
-        return GeometryDecoration(preset, fillHex, lineHex, lineWidth, adjustments, bounds)
+        return GeometryDecoration(preset, fill, outline, adjustments, bounds)
     }
 
-    private fun hexOf(color: CTSRgbColor): String? =
-        color.`val`?.takeIf { it.size == 3 }?.joinToString("") { "%02X".format(it) }
+    /**
+     * The background PowerPoint paints behind [slide]: the slide's own `p:bg`, else its
+     * layout's, else its master's. A `bgPr` carries the fill directly, a `bgRef` points
+     * into the theme's background fill styles with its colour as the placeholder. An
+     * image background is resolved against the sheet that declares it, because that is
+     * where its relationship id is defined.
+     */
+    private fun backgroundOf(slide: XSLFSlide, theme: PptTheme?): Fill? {
+        val sheets: List<XSLFSheet> = listOfNotNull(slide, slide.slideLayout, slide.slideMaster)
+        for (sheet in sheets) {
+            val bg = commonSlideDataOf(sheet)?.bg ?: continue
+            bg.bgPr?.let { pr ->
+                pr.blipFill?.blip?.embed?.takeIf { it.isNotBlank() }?.let { id ->
+                    val picture = sheet.getRelationById(id) as? XSLFPictureData
+                    picture?.data?.takeIf { it.isNotEmpty() }?.let { return PictureFill(it, picture.fileName) }
+                }
+                return theme?.fillOf(pr.solidFill, pr.gradFill)
+                    ?: pr.solidFill?.srgbClr?.let { PptTheme.srgbColor(it) }?.let { SolidFill(it) }
+            }
+            bg.bgRef?.let { ref -> return theme?.fillStyle(ref.idx, theme.refColor(ref.srgbClr, ref.schemeClr)) }
+            return null
+        }
+        return null
+    }
+
+    private fun commonSlideDataOf(sheet: XSLFSheet): CTCommonSlideData? = when (val xml = sheet.xmlObject) {
+        is CTSlide -> xml.cSld
+        is CTSlideLayout -> xml.cSld
+        is CTSlideMaster -> xml.cSld
+        else -> null
+    }
+
+    /**
+     * The colour of text in [shape] that names no colour itself, walking the same
+     * hierarchy PowerPoint does: the shape's font reference, the matching placeholder
+     * on the layout and then the master, the master's text styles for the placeholder
+     * kind, and finally the theme's text colour.
+     */
+    private fun defaultTextColorOf(shape: XSLFTextShape, theme: PptTheme?): String? {
+        if (theme == null) return null
+        val xml = shape.xmlObject as? CTShape
+        xml?.style?.fontRef?.let { ref -> theme.refColor(ref.srgbClr, ref.schemeClr)?.let { return it } }
+        val slot = shape.placeholder
+        val layout = (shape.sheet as? XSLFSlide)?.slideLayout
+        val master = layout?.slideMaster
+        if (slot != null) {
+            for (sheet in listOfNotNull(layout, master)) {
+                val inherited = sheet.placeholders.firstOrNull { it.placeholder == slot } ?: continue
+                val defRPr = (inherited.xmlObject as? CTShape)?.txBody?.lstStyle?.lvl1PPr?.defRPr
+                theme.colorOf(defRPr?.solidFill)?.let { return it }
+            }
+        }
+        val styles = master?.xmlObject?.txStyles
+        val listStyle = when (slot) {
+            null -> styles?.otherStyle
+            Placeholder.TITLE, Placeholder.CENTERED_TITLE -> styles?.titleStyle
+            Placeholder.BODY, Placeholder.CONTENT, Placeholder.SUBTITLE -> styles?.bodyStyle
+            else -> styles?.otherStyle
+        }
+        theme.colorOf(listStyle?.lvl1PPr?.defRPr?.solidFill)?.let { return it }
+        return theme.slotColor("tx1")
+    }
 
     /**
      * Copies one slide's shape tree onto another, keeping images, tables, formatting and
@@ -423,10 +599,9 @@ object PptDocument {
      * the slide holds a picture. Copying the XML and re-declaring the source's package
      * relationships reaches the same result without constructing a shape object at all.
      *
-     * Known limit: POI's cached shape list for the target is not rebuilt, because the only
-     * method that rebuilds it is the one that crashes. A text edit made to a duplicated
-     * slide before the file has been saved is therefore not written. Editing the duplicate
-     * after reopening the file behaves normally.
+     * POI's cached shape list for the target is not rebuilt here, because the only
+     * method that rebuilds it is the one that crashes; applyEditsAndSerialize reopens
+     * the document after the structural operations instead, which rebuilds it.
      */
     private fun copySlideContent(source: XSLFSlide, target: XSLFSlide) {
         // The copied shape XML refers to its images by relationship id (r:embed="rId2"),
@@ -438,6 +613,11 @@ object PptDocument {
             target.packagePart.addRelationship(rel.targetURI, rel.targetMode, rel.relationshipType, rel.id)
         }
         target.xmlObject.cSld.spTree.set(source.xmlObject.cSld.spTree)
+        // The background and colour map live beside the shape tree, not in it. Without
+        // these a duplicate of a slide with its own gradient comes back in the master's.
+        val sourceData = source.xmlObject.cSld
+        if (sourceData.isSetBg) target.xmlObject.cSld.bg = sourceData.bg
+        if (source.xmlObject.isSetClrMapOvr) target.xmlObject.clrMapOvr = source.xmlObject.clrMapOvr
     }
 
     /**
@@ -447,26 +627,33 @@ object PptDocument {
      * coordinates relative to the group's own child offset, so drawing them without
      * applying that transform would scatter them across the slide.
      */
-    private fun decorationsOf(slide: XSLFSlide): List<SlideDecoration> =
-        slide.shapes.mapNotNull { shape ->
-            when (shape) {
-                is XSLFPictureShape -> shape.pictureData?.data
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { PictureDecoration(it, shape.pictureData?.fileName, boundsOfXml(shape.xmlObject)) }
+    private fun decorationsOf(slide: XSLFSlide, theme: PptTheme?): List<SlideDecoration> =
+        decorationEntries(slide, theme).map { it.second }
 
-                is XSLFTable -> TableDecoration(
-                    rows = shape.rows.map { row -> row.cells.map { it.text ?: "" } },
-                    bounds = boundsOfXml(shape.xmlObject),
-                )
+    /**
+     * Each decoration with the POI shape it came from, in the order the editor indexes
+     * them. Read and write share this so a moved decoration lands on its own shape.
+     */
+    private fun decorationEntries(slide: XSLFSlide, theme: PptTheme?): List<Pair<XSLFShape, SlideDecoration>> =
+        slide.shapes.mapNotNull { shape -> decorationOf(shape, theme)?.let { shape to it } }
 
-                is XSLFGraphicFrame -> UnsupportedDecoration("Chart or diagram", boundsOfXml(shape.xmlObject))
-                is XSLFGroupShape -> UnsupportedDecoration("Grouped shapes", boundsOfXml(shape.xmlObject))
-                // An autoshape: either its surface is an image, which is how a
-                // full-slide backdrop is normally authored, or it is preset geometry
-                // with a fill or outline of its own.
-                else -> fillPictureOf(shape) ?: geometryOf(shape)
-            }
-        }
+    private fun decorationOf(shape: XSLFShape, theme: PptTheme?): SlideDecoration? = when (shape) {
+        is XSLFPictureShape -> shape.pictureData?.data
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { PictureDecoration(it, shape.pictureData?.fileName, boundsOfXml(shape.xmlObject)) }
+
+        is XSLFTable -> TableDecoration(
+            rows = shape.rows.map { row -> row.cells.map { it.text ?: "" } },
+            bounds = boundsOfXml(shape.xmlObject),
+        )
+
+        is XSLFGraphicFrame -> UnsupportedDecoration("Chart or diagram", boundsOfXml(shape.xmlObject))
+        is XSLFGroupShape -> UnsupportedDecoration("Grouped shapes", boundsOfXml(shape.xmlObject))
+        // An autoshape: either its surface is an image, which is how a full-slide
+        // backdrop is normally authored, or it is preset geometry with a fill or
+        // outline of its own.
+        else -> fillPictureOf(shape) ?: geometryOf(shape, theme)
+    }
 
     /**
      * A shape's position in points, or null when nothing in the file declares one.
@@ -534,52 +721,122 @@ object PptDocument {
         }
     }
 
-    private fun applyRunsToShape(shape: XSLFTextShape, runs: List<ShapeRun>) {
+    /**
+     * Replaces a shape's text with [runs], keeping what the runs do not describe.
+     *
+     * The editor models bold, italic, underline, size, colour and font. A shape carries
+     * more than that: paragraph alignment, bullets, spacing, and per-run language,
+     * kerning and effects. Clearing the text and adding fresh paragraphs would reset
+     * all of it, so each new paragraph takes the paragraph properties of the one that
+     * stood at its index (or the last one, for paragraphs the edit added), and every
+     * run starts from a copy of the shape's first run properties before the modelled
+     * fields are applied on top. A newline in a run is a paragraph boundary.
+     */
+    private fun applyRunsToShape(shape: XSLFTextShape, runs: List<ShapeRun>, alignments: List<String?> = emptyList()) {
+        val body = (shape.xmlObject as? CTShape)?.txBody
+        // Detached copies: clearText removes the originals from the document.
+        val oldParagraphs = body?.pList.orEmpty().map { it.copy() as CTTextParagraph }
+        val templateRPr = oldParagraphs.firstNotNullOfOrNull { it.rList.firstOrNull()?.rPr }
         shape.clearText()
-        val para = if (shape.textParagraphs.isEmpty()) shape.addNewTextParagraph() else shape.textParagraphs.first()
-        for (run in runs) {
-            val r = para.addNewTextRun()
-            r.setText(run.text)
-            r.isBold = run.style.bold
-            r.isItalic = run.style.italic
-            r.isUnderlined = run.style.underline
-            run.style.sizePt?.let { r.fontSize = it.toDouble() }
-            run.style.fontFamily?.let { r.setFontFamily(it) }
-            run.style.colorHex?.let { hex ->
-                try {
-                    val rPrMethod = r.xmlObject.javaClass.getMethod("isSetRPr")
-                    val isSet = rPrMethod.invoke(r.xmlObject) as Boolean
-                    val rPr = if (isSet) {
-                        r.xmlObject.javaClass.getMethod("getRPr").invoke(r.xmlObject)
-                    } else {
-                        r.xmlObject.javaClass.getMethod("addNewRPr").invoke(r.xmlObject)
+        splitParagraphs(runs).forEachIndexed { index, paragraphRuns ->
+            val para = shape.addNewTextParagraph()
+            val source = oldParagraphs.getOrNull(index) ?: oldParagraphs.lastOrNull()
+            source?.pPr?.let { para.xmlObject.pPr = it }
+            source?.endParaRPr?.let { para.xmlObject.endParaRPr = it }
+            alignments.getOrNull(index)?.let { token ->
+                val pPr = para.xmlObject.pPr ?: para.xmlObject.addNewPPr()
+                pPr.algn = STTextAlignType.Enum.forString(token)
+            }
+            for (run in paragraphRuns) {
+                val r = para.addNewTextRun()
+                val rPr = (r.xmlObject as? CTRegularTextRun)?.let { ct ->
+                    templateRPr?.let { ct.rPr = it }
+                    ct.rPr ?: ct.addNewRPr()
+                }
+                r.setText(run.text)
+                r.isBold = run.style.bold
+                r.isItalic = run.style.italic
+                r.isUnderlined = run.style.underline
+                run.style.fontFamily?.let { r.setFontFamily(it) }
+                if (rPr != null) {
+                    // A null in the model means "inherited": the template must not
+                    // leak its own explicit value into a run that never had one.
+                    val size = run.style.sizePt
+                    if (size != null) r.fontSize = size.toDouble() else if (rPr.isSetSz) rPr.unsetSz()
+                    val rgb = run.style.colorHex?.let { rgbBytes(it) }
+                    if (rgb != null) {
+                        val fill = if (rPr.isSetSolidFill) rPr.solidFill else rPr.addNewSolidFill()
+                        if (fill.isSetSchemeClr) fill.unsetSchemeClr()
+                        if (fill.isSetSysClr) fill.unsetSysClr()
+                        (if (fill.isSetSrgbClr) fill.srgbClr else fill.addNewSrgbClr()).`val` = rgb
+                    } else if (rPr.isSetSolidFill) {
+                        rPr.unsetSolidFill()
                     }
-                    val solidFillMethod = rPr.javaClass.getMethod("isSetSolidFill")
-                    val isSetSolid = solidFillMethod.invoke(rPr) as Boolean
-                    val solidFill = if (isSetSolid) {
-                        rPr.javaClass.getMethod("getSolidFill").invoke(rPr)
-                    } else {
-                        rPr.javaClass.getMethod("addNewSolidFill").invoke(rPr)
-                    }
-                    val srgbClrMethod = solidFill.javaClass.getMethod("isSetSrgbClr")
-                    val isSetSrgb = srgbClrMethod.invoke(solidFill) as Boolean
-                    val srgbClr = if (isSetSrgb) {
-                        solidFill.javaClass.getMethod("getSrgbClr").invoke(solidFill)
-                    } else {
-                        solidFill.javaClass.getMethod("addNewSrgbClr").invoke(solidFill)
-                    }
-                    val setValMethod = srgbClr.javaClass.getMethod("setVal", ByteArray::class.java)
-                    val clean = hex.removePrefix("#")
-                    val parsed = clean.toLongOrNull(16) ?: return@let
-                    val rVal = (parsed shr 16 and 0xFF).toByte()
-                    val gVal = (parsed shr 8 and 0xFF).toByte()
-                    val bVal = (parsed and 0xFF).toByte()
-                    setValMethod.invoke(srgbClr, byteArrayOf(rVal, gVal, bVal))
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
             }
         }
+    }
+
+    /**
+     * Writes a shape's position and size as its own transform. A placeholder that
+     * inherited its geometry from the layout gets an explicit one, which is exactly
+     * what PowerPoint does the moment such a shape is moved.
+     */
+    private fun setBounds(shape: XSLFTextShape, bounds: ShapeBounds) = setBoundsOfXml(shape.xmlObject, bounds)
+
+    /** Writes a transform onto whichever shape kind [xml] is; a group is left alone. */
+    private fun setBoundsOfXml(xml: XmlObject, bounds: ShapeBounds) {
+        val xfrm = when (xml) {
+            is CTShape -> (xml.spPr ?: xml.addNewSpPr()).let { it.xfrm ?: it.addNewXfrm() }
+            is CTPicture -> (xml.spPr ?: xml.addNewSpPr()).let { it.xfrm ?: it.addNewXfrm() }
+            is CTConnector -> (xml.spPr ?: xml.addNewSpPr()).let { it.xfrm ?: it.addNewXfrm() }
+            is CTGraphicalObjectFrame -> xml.xfrm ?: xml.addNewXfrm()
+            else -> return
+        }
+        val off = xfrm.off ?: xfrm.addNewOff()
+        off.x = (bounds.x * EmuPerPoint).toLong()
+        off.y = (bounds.y * EmuPerPoint).toLong()
+        val ext = xfrm.ext ?: xfrm.addNewExt()
+        ext.cx = (bounds.width * EmuPerPoint).toLong()
+        ext.cy = (bounds.height * EmuPerPoint).toLong()
+    }
+
+    /** A shape's effective vertical anchor as its OOXML token, inherited values included. */
+    private fun anchorTokenOf(shape: XSLFTextShape): String? = when (shape.verticalAlignment) {
+        VerticalAlignment.TOP -> "t"
+        VerticalAlignment.MIDDLE -> "ctr"
+        VerticalAlignment.BOTTOM -> "b"
+        VerticalAlignment.JUSTIFIED, VerticalAlignment.DISTRIBUTED -> "ctr"
+        null -> null
+    }
+
+    /** A paragraph's effective alignment as its OOXML token, inherited values included. */
+    private fun alignTokenOf(paragraph: XSLFTextParagraph): String? = when (paragraph.textAlign) {
+        TextParagraph.TextAlign.LEFT -> "l"
+        TextParagraph.TextAlign.CENTER -> "ctr"
+        TextParagraph.TextAlign.RIGHT -> "r"
+        TextParagraph.TextAlign.JUSTIFY, TextParagraph.TextAlign.JUSTIFY_LOW,
+        TextParagraph.TextAlign.DIST, TextParagraph.TextAlign.THAI_DIST -> "just"
+        null -> null
+    }
+
+    /** Runs cut into paragraphs at every newline; the newlines themselves are dropped. */
+    private fun splitParagraphs(runs: List<ShapeRun>): List<List<ShapeRun>> {
+        val paragraphs = ArrayList<MutableList<ShapeRun>>()
+        var current = ArrayList<ShapeRun>().also { paragraphs.add(it) }
+        for (run in runs) {
+            val pieces = run.text.split('\n')
+            pieces.forEachIndexed { i, piece ->
+                if (i > 0) current = ArrayList<ShapeRun>().also { paragraphs.add(it) }
+                if (piece.isNotEmpty()) current.add(run.copy(text = piece))
+            }
+        }
+        return paragraphs
+    }
+
+    private fun rgbBytes(hex: String): ByteArray? {
+        val parsed = hex.removePrefix("#").takeIf { it.length == 6 }?.toLongOrNull(16) ?: return null
+        return byteArrayOf((parsed shr 16 and 0xFF).toByte(), (parsed shr 8 and 0xFF).toByte(), (parsed and 0xFF).toByte())
     }
 
     private fun collapse(runs: List<ShapeRun>): List<ShapeRun> {

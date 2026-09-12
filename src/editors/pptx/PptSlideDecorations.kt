@@ -20,6 +20,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -41,7 +47,7 @@ internal fun parseHex(hex: String): Color {
 }
 
 /** Where a decoration goes when the file declares no geometry for it, in slide points. */
-private val FallbackDecorationBounds = PptDocument.ShapeBounds(80f, 80f, 400f, 240f)
+internal val FallbackDecorationBounds = PptDocument.ShapeBounds(80f, 80f, 400f, 240f)
 
 private val DecorationLabelSize = 13.sp
 private val TableCellTextSize = 11.sp
@@ -61,13 +67,14 @@ private const val PlaceholderDash = 6f
  */
 @Composable
 fun SlideDecorationLayer(
-    decorations: List<PptDocument.SlideDecoration>,
+    decorations: List<PptEditorViewModel.DecorationState>,
     modifier: Modifier = Modifier,
 ) {
     if (decorations.isEmpty()) return
     Box(modifier) {
-        decorations.forEach { decoration ->
-            val bounds = decoration.bounds ?: FallbackDecorationBounds
+        decorations.forEach { state ->
+            val decoration = state.decoration
+            val bounds = state.bounds
             val placed = Modifier
                 .offset(x = bounds.x.dp, y = bounds.y.dp)
                 .size(width = bounds.width.dp, height = bounds.height.dp)
@@ -125,14 +132,56 @@ private fun GeometryDecorationView(
         UnsupportedDecorationView("Shape: ${shape.preset}", modifier)
         return
     }
-    val fill = shape.fillHex?.let { parseHex(it) }
-    val line = shape.lineHex?.let { parseHex(it) }
+    val outline = shape.outline?.let { parseHex(it.colorHex) to it.width }
     Box(
         modifier.drawBehind {
             val path = PptShapeGeometry.path(shape.preset, size, shape.adjustments) ?: return@drawBehind
-            if (fill != null) drawPath(path, fill)
-            if (line != null) drawPath(path, line, style = Stroke(width = shape.lineWidth.dp.toPx()))
+            when (val fill = shape.fill) {
+                is PptDocument.SolidFill -> drawPath(path, parseHex(fill.hex))
+                is PptDocument.GradientFill -> drawPath(path, gradientBrush(fill, size))
+                // Picture fills on shapes arrive as PictureDecoration instead.
+                is PptDocument.PictureFill, null -> Unit
+            }
+            if (outline != null) drawPath(path, outline.first, style = Stroke(width = outline.second.dp.toPx()))
         },
+    )
+}
+
+/**
+ * The surface of a slide: white unless the file paints it, as PowerPoint does. Drawn
+ * first inside the slide box so everything else sits on it.
+ */
+@Composable
+fun SlideBackground(fill: PptDocument.Fill?, modifier: Modifier = Modifier) {
+    when (fill) {
+        null -> Box(modifier.background(Color.White))
+        is PptDocument.SolidFill -> Box(modifier.background(parseHex(fill.hex)))
+        is PptDocument.GradientFill -> Box(modifier.drawBehind { drawRect(gradientBrush(fill, size)) })
+        is PptDocument.PictureFill -> Box(modifier.background(Color.White)) {
+            PictureDecorationView(
+                PptDocument.PictureDecoration(fill.bytes, fill.fileName, bounds = null, fillsShape = true),
+                Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * A DrawingML linear gradient as a brush over [size]. The angle is clockwise from the
+ * x axis, 0 running left to right and 90 top to bottom, and the gradient line is
+ * stretched so the first and last stops land on the two corners it passes nearest.
+ */
+private fun gradientBrush(fill: PptDocument.GradientFill, size: Size): Brush {
+    val radians = Math.toRadians(fill.angleDegrees.toDouble())
+    val dx = cos(radians).toFloat()
+    val dy = sin(radians).toFloat()
+    val length = abs(size.width * dx) + abs(size.height * dy)
+    val center = Offset(size.width / 2f, size.height / 2f)
+    val half = Offset(dx * length / 2f, dy * length / 2f)
+    return Brush.linearGradient(
+        colorStops = fill.stops.map { it.position to parseHex(it.color) }.toTypedArray(),
+        start = center - half,
+        end = center + half,
     )
 }
 
