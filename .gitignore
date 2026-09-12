@@ -35,6 +35,7 @@ changes_version.md
 # Internal / not-for-public-repo: planning docs, ADRs, release roadmap,
 # session handoffs, and the UI design handoff bundle. Kept local only.
 .internal/
+local/
 # UI design handoff archive dropped at repo root (extracted into .internal/design/).
 /kern.zip
 # Font source archive dropped at repo root (static .ttf extracted into res/font/).

@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.OpenWith
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Schedule
@@ -60,6 +61,9 @@ import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.VerticalAlignBottom
+import androidx.compose.material.icons.outlined.VerticalAlignCenter
+import androidx.compose.material.icons.outlined.VerticalAlignTop
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.ui.graphics.Color
@@ -131,6 +135,10 @@ object KernIcons {
     val Page = Icons.Outlined.Article
     val Text = Icons.Outlined.TextFields
     val Zoom = Icons.Outlined.ZoomIn
+    val Move = Icons.Outlined.OpenWith
+    val AlignTop = Icons.Outlined.VerticalAlignTop
+    val AlignMiddle = Icons.Outlined.VerticalAlignCenter
+    val AlignBottom = Icons.Outlined.VerticalAlignBottom
     val Trash = Icons.Outlined.Delete
     val Download = Icons.Outlined.Download
     val Info = Icons.Outlined.Info
