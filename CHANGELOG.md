@@ -2,6 +2,20 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.11.1] - 2026-10-31 16:53 IST
+
+### Tests
+- **PowerPoint Theme Resolver** (`PptThemeTest.kt`): colour scheme through the master's colour map, slide and layout colour map overrides and their precedence, `phClr`; `lumMod`, `lumOff`, `tint`, `shade` and `alpha` against hand-computed values, hue kept under `lumMod`; fill, background fill and line style lists addressed by `idx` (0 for none, 1001 and up for backgrounds, past the end); `bgRef` resolved through the slide's colour map; background inheritance slide, layout, master, none; picture backgrounds
+- **PowerPoint Rich Text** (`PptRichTextTest.kt`): `mergeEdit` keeps every other run's formatting through a keystroke, styles inserted text from the character before it, applies a pending style to the insertion only, keeps paragraph alignment through typing, Enter inside and at the end of a paragraph, and joining paragraphs; runs to `AnnotatedString` and back for every modelled field; alignment tokens; `alignParagraphs`, `restyleRange`, `styleAt`, `wordAt`
+- **PowerPoint Document** (`PptDocumentTest.kt`, rewritten): slide size, paragraphs, alignment, run formatting and theme run colour on read; explicit, universal measure and layout-inherited bounds; inherited text colour through the font reference and the theme; which shapes are editable text and which are pictures, tables, groups and drawn shapes, with style references resolved; `applyRunsToShape` splitting paragraphs, keeping each paragraph's properties (bullet, margin) by index, alignment overrides, keeping unmodelled run properties (language) while writing modelled ones, sRGB colour replacing a theme colour, inherited size left unset; untouched shapes byte-identical after a save; bounds, anchor and decoration bounds write-back, placeholders gaining an explicit transform; insert, delete, move and duplicate slides and their ordering; duplicate then edit then save, and a second save of the result
+- **PowerPoint Change Tracking** (`PptEditorViewModelTest.kt`): a loaded shape is unchanged; a caret move or a keystroke reporting the same text is not a change; typing, restyling, realigning, moving and re-anchoring each mark only what they touch; a copied shape keeps its saved state
+- **PowerPoint Shape Geometry** (`PptShapeGeometryTest.kt`): every supported preset fills its box; rectangle, rounded rectangle and its radius guide, ellipse, diamond, triangle and its apex guide, line, and the four block arrows with their shaft and head guides, checked by points inside and outside the outline
+- Robolectric 4.14.1 as a unit-test dependency, for the geometry tests, which draw through `android.graphics.Path`
+- Six tests fail against this version and record defects in 0.1.11.0: per-run font names are dropped when text is shown for editing, so edited shapes lose their fonts on save (`toRuns_ofToAnnotated_roundTripsEveryModelledField`, `mergeEdit_keepsSizeColourAndFontOfARun`); a slide inserted with the Title layout loses its subtitle on save (`insertSlide_title_writesTheTitleAndSubtitleTheEditorShows`); a slide inserted with the Blank layout gets a stray empty text box (`insertSlide_blank_writesNoShapes`, `insertSlide_blank_thenAddTextBox_isTheOnlyShape`); a picture placeholder that inherits its geometry from the layout has no position, and saving moves it (`read_picturePlaceholderWithoutGeometry_inheritsLayouts`)
+
+### Results
+- 168 tests across 12 suites: 162 passed, 6 failed, the six listed above (51s, local Gradle `testDebugUnitTest`); lint clean
+
 ## [0.1.11.0] - 2026-09-12 18:20 IST
 
 ### Added
