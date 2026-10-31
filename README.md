@@ -18,6 +18,7 @@
 [![Apache POI](https://img.shields.io/badge/Apache%20POI-5.5.1-D22128?style=flat-square&logo=apache&logoColor=white)](https://poi.apache.org/)
 [![OpenCSV](https://img.shields.io/badge/OpenCSV-5.12.0-08427B?style=flat-square)](https://opencsv.sourceforge.net/)
 [![jsoup](https://img.shields.io/badge/jsoup-1.23.2-1D9BF0?style=flat-square)](https://jsoup.org/)
+[![commonmark-java](https://img.shields.io/badge/commonmark--java-0.30.1-000000?style=flat-square&logo=markdown&logoColor=white)](https://github.com/commonmark/commonmark-java)
 <!-- PDF engine -->
 <!-- Qyra and MuPDF have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
 [![Qyra](https://img.shields.io/badge/Qyra-JNI%2FNDK%20bridge-DEA584?style=flat-square&logo=rust&logoColor=white)](https://github.com/zParik/Qyra)
@@ -45,12 +46,20 @@ Kern works with common document types:
 - Presentations - `.pptx`
 - PDF - `.pdf`
 - EPUB - `.epub`
+- Markdown - `.md`, `.markdown` (and `.mdown`, `.mkd`, `.mkdn`, `.mdwn`, `.mdx`), with a rendered preview
+- Plain text - `.txt`, `.rst`, `.org`
 
 ## Tech stack
 
 - **Language:** Kotlin + Jetpack Compose
 - **Office formats:** Apache POI (xlsx, docx, pptx) + OpenCSV
-- **PDF engine:** MuPDF via the [Qyra](https://github.com/zParik/Qyra) Rust JNI/NDK bridge (GPL-3.0)
+- **Markdown:** commonmark-java with the GitHub extensions; the preview bundles KaTeX (maths), Mermaid (diagrams) and highlight.js (code), all running offline
+- **Markdown preview:** [KaTeX](https://katex.org/) (MIT), [Mermaid](https://mermaid.js.org/) (MIT),
+[highlight.js](https://highlightjs.org/) (BSD-3-Clause) and the [gemoji](https://github.com/wooorm/gemoji)
+shortcode list (MIT) ship inside the app under `assets/preview/`; their licence texts are in
+`licenses/preview/`.
+
+**PDF engine:** MuPDF via the [Qyra](https://github.com/zParik/Qyra) Rust JNI/NDK bridge (GPL-3.0)
 - **License:** AGPL-3.0
 - **Min Android API:** 26 (Android 8.0+)
 
@@ -111,6 +120,11 @@ Kern requests no network permissions, so the network clause is unlikely to bite
 in normal use. It applies to anyone who forks Kern and adds networking.
 
 See the [LICENSE](LICENSE) file for the full license text.
+
+**Markdown preview:** [KaTeX](https://katex.org/) (MIT), [Mermaid](https://mermaid.js.org/) (MIT),
+[highlight.js](https://highlightjs.org/) (BSD-3-Clause) and the [gemoji](https://github.com/wooorm/gemoji)
+shortcode list (MIT) ship inside the app under `assets/preview/`; their licence texts are in
+`licenses/preview/`.
 
 **PDF engine:** MuPDF via the [Qyra](https://github.com/zParik/Qyra) Rust JNI/NDK
 bridge, licensed GPL-3.0. GPL-3.0 code inside an AGPL-3.0 project is compatible;

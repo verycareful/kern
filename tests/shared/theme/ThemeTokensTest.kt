@@ -49,5 +49,7 @@ class ThemeTokensTest {
         assertEquals("CSV", DocumentFormat.CSV.monogram)
         assertEquals("PPT", DocumentFormat.POWERPOINT.monogram)
         assertEquals("EPB", DocumentFormat.EPUB.monogram)
+        assertEquals("MD", DocumentFormat.MARKDOWN.monogram)
+        assertEquals("TXT", DocumentFormat.TEXT.monogram)
     }
 }

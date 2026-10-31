@@ -62,6 +62,13 @@
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
                 <data android:mimeType="application/vnd.ms-powerpoint" />
                 <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/x-rst" />
+                <data android:mimeType="text/prs.fallenstein.rst" />
+                <data android:mimeType="text/org" />
+                <data android:mimeType="text/x-org" />
             </intent-filter>
         </activity>
 

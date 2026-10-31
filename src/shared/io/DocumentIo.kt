@@ -3,6 +3,7 @@ package dev.kern.shared.io
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import android.provider.OpenableColumns
 import java.io.File
 import java.io.IOException
@@ -58,6 +59,36 @@ object DocumentIo {
             }
         return uri.lastPathSegment?.substringAfterLast('/') ?: "document"
     }
+
+    /**
+     * The file on shared storage behind [uri], when one can be named: file:// URIs,
+     * and documents from the system's external storage and downloads providers,
+     * whose document IDs carry the path. Null for any other provider. Used only to
+     * find files next to a document (a Markdown file's images); reading them still
+     * needs Kern's storage access.
+     */
+    fun localFile(uri: Uri): File? {
+        if (uri.scheme == "file") return uri.path?.let(::File)
+        if (uri.scheme != "content") return null
+        val docId = uri.lastPathSegment ?: return null
+        return when (uri.authority) {
+            EXTERNAL_STORAGE_AUTHORITY -> {
+                val volume = docId.substringBefore(':')
+                val path = docId.substringAfter(':', "")
+                if (volume.equals("primary", ignoreCase = true)) {
+                    File(Environment.getExternalStorageDirectory(), path)
+                } else {
+                    File("/storage/$volume", path)
+                }
+            }
+            DOWNLOADS_AUTHORITY -> docId.takeIf { it.startsWith(RAW_PREFIX) }?.let { File(it.removePrefix(RAW_PREFIX)) }
+            else -> null
+        }
+    }
+
+    private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
+    private const val DOWNLOADS_AUTHORITY = "com.android.providers.downloads.documents"
+    private const val RAW_PREFIX = "raw:"
 
     /**
      * Keeps long-lived read/write access to a picker-provided URI across restarts.

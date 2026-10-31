@@ -13,8 +13,8 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.1.11.2"
+        versionCode = 30
+        versionName = "0.1.12.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
@@ -37,6 +37,7 @@ android {
         manifest.srcFile("AndroidManifest.xml")
         java.srcDirs("src")
         res.srcDirs("res")
+        assets.srcDirs("assets")
         jniLibs.srcDirs("jniLibs")
     }
     // List unit dirs explicitly so tests/instrumented (androidTest) is not also
@@ -88,6 +89,7 @@ dependencies {
     implementation(libs.poi.ooxml)
     implementation(libs.opencsv)
     implementation(libs.jsoup)
+    implementation(libs.bundles.commonmark)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     testImplementation(libs.junit)

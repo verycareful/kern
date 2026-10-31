@@ -13,6 +13,7 @@ import dev.kern.editors.epub.EpubEditorScreen
 import dev.kern.editors.excel.ExcelEditorScreen
 import dev.kern.editors.pdf.PdfEditorScreen
 import dev.kern.editors.pptx.PptEditorScreen
+import dev.kern.editors.text.TextEditorScreen
 import dev.kern.editors.word.WordEditorScreen
 import dev.kern.settings.SettingsScreen
 import dev.kern.shared.DocumentFormat
@@ -34,6 +35,8 @@ object Destinations {
     const val POWERPOINT = "pptx"
     const val PDF = "pdf"
     const val EPUB = "epub"
+    const val MARKDOWN = "markdown"
+    const val TEXT = "text"
 
     /** Route a resolved format to its editor destination base (without the argument). */
     fun routeFor(format: DocumentFormat): String = when (format) {
@@ -43,6 +46,8 @@ object Destinations {
         DocumentFormat.POWERPOINT -> POWERPOINT
         DocumentFormat.PDF -> PDF
         DocumentFormat.EPUB -> EPUB
+        DocumentFormat.MARKDOWN -> MARKDOWN
+        DocumentFormat.TEXT -> TEXT
     }
 }
 
@@ -71,6 +76,8 @@ fun KernNavHost(
         editorDestination(Destinations.POWERPOINT) { PptEditorScreen(filePath = it) }
         editorDestination(Destinations.PDF) { PdfEditorScreen(filePath = it) }
         editorDestination(Destinations.EPUB) { EpubEditorScreen(filePath = it) }
+        editorDestination(Destinations.MARKDOWN) { TextEditorScreen(filePath = it, format = DocumentFormat.MARKDOWN) }
+        editorDestination(Destinations.TEXT) { TextEditorScreen(filePath = it, format = DocumentFormat.TEXT) }
     }
 }
 

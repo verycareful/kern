@@ -16,4 +16,6 @@ fun DocumentFormat.style(): FormatStyle = when (this) {
     DocumentFormat.POWERPOINT -> FormatStyle(Color(0xFFD06A2C), "PPTX")
     DocumentFormat.PDF -> FormatStyle(Color(0xFFC4332E), "PDF")
     DocumentFormat.EPUB -> FormatStyle(Color(0xFF6B4FA0), "EPUB")
+    DocumentFormat.MARKDOWN -> FormatStyle(Color(0xFF3F4F6B), "MD")
+    DocumentFormat.TEXT -> FormatStyle(Color(0xFF6B6459), "TXT")
 }

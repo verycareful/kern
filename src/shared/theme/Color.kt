@@ -84,6 +84,8 @@ fun DocumentFormat.hue(): FormatHue = when (this) {
     DocumentFormat.EXCEL -> FormatHue(Color(0xFF1F8454), Color(0xFF5FC893))
     DocumentFormat.CSV -> FormatHue(Color(0xFF0E8E9A), Color(0xFF54C9D4))
     DocumentFormat.EPUB -> FormatHue(Color(0xFF8657C6), Color(0xFFBB97EC))
+    DocumentFormat.MARKDOWN -> FormatHue(Color(0xFF3F4F6B), Color(0xFF9FB3D6))
+    DocumentFormat.TEXT -> FormatHue(Color(0xFF6B6459), Color(0xFFBDB5A8))
 }
 
 /** Three-letter monogram shown in badges and grid thumbnails. */
@@ -95,6 +97,8 @@ val DocumentFormat.monogram: String
         DocumentFormat.EXCEL -> "XLS"
         DocumentFormat.CSV -> "CSV"
         DocumentFormat.EPUB -> "EPB"
+        DocumentFormat.MARKDOWN -> "MD"
+        DocumentFormat.TEXT -> "TXT"
     }
 
 // ---- Backwards-compatibility -----------------------------------------------

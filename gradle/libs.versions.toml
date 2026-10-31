@@ -14,6 +14,8 @@ poi = "5.5.1"
 opencsv = "5.12.0"
 # jsoup does not backport security fixes, so this tracks the current release.
 jsoup = "1.23.2"
+# Markdown: CommonMark parser plus the GitHub-flavoured extensions the preview renders.
+commonmark = "0.30.1"
 # Test deps are wired here but live in the 0.1.0.1 (tests-only) release.
 junit = "4.13.2"
 androidxJunit = "1.2.1"
@@ -43,6 +45,18 @@ opencsv = { group = "com.opencsv", name = "opencsv", version.ref = "opencsv" }
 # EPUB: ZIP container + XHTML chapters. Jsoup parses/edits XHTML text nodes.
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 
+# Markdown and text editor preview (pure JVM). The preview's JavaScript (KaTeX,
+# Mermaid, highlight.js) is bundled under assets/preview, not resolved here.
+commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
+commonmark-ext-gfm-tables = { group = "org.commonmark", name = "commonmark-ext-gfm-tables", version.ref = "commonmark" }
+commonmark-ext-gfm-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+commonmark-ext-gfm-alerts = { group = "org.commonmark", name = "commonmark-ext-gfm-alerts", version.ref = "commonmark" }
+commonmark-ext-task-list-items = { group = "org.commonmark", name = "commonmark-ext-task-list-items", version.ref = "commonmark" }
+commonmark-ext-autolink = { group = "org.commonmark", name = "commonmark-ext-autolink", version.ref = "commonmark" }
+commonmark-ext-footnotes = { group = "org.commonmark", name = "commonmark-ext-footnotes", version.ref = "commonmark" }
+commonmark-ext-heading-anchor = { group = "org.commonmark", name = "commonmark-ext-heading-anchor", version.ref = "commonmark" }
+commonmark-ext-yaml-front-matter = { group = "org.commonmark", name = "commonmark-ext-yaml-front-matter", version.ref = "commonmark" }
+
 # Tests
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
@@ -51,6 +65,13 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 androidx-ui-test = { group = "androidx.compose.ui", name = "ui-test" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+
+[bundles]
+commonmark = [
+    "commonmark", "commonmark-ext-gfm-tables", "commonmark-ext-gfm-strikethrough",
+    "commonmark-ext-gfm-alerts", "commonmark-ext-task-list-items", "commonmark-ext-autolink",
+    "commonmark-ext-footnotes", "commonmark-ext-heading-anchor", "commonmark-ext-yaml-front-matter",
+]
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
