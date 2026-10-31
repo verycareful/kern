@@ -717,14 +717,17 @@ class PptDocumentTest {
         assertEquals(listOf(listOf("A"), listOf("Note")), PptFixtures.texts(out))
     }
 
-    @Test
-    fun read_picturePlaceholderWithoutGeometry_inheritsLayouts() {
+    /**
+     * A deck whose one slide holds a picture filling the PIC_TX layout's picture
+     * placeholder with no geometry of its own, and the bounds that placeholder declares.
+     */
+    private fun picturePlaceholderDeck(): Pair<ByteArray, ShapeBounds> {
         val ppt = PptFixtures.themed()
         val layout = ppt.slideMasters[0].getLayout(SlideLayout.PIC_TX)
         val slot = layout.placeholders.first { it.placeholder == Placeholder.PICTURE }
         val slotXml = slot.xmlObject as CTShape
         val xfrm = requireNotNull(slotXml.spPr.xfrm) { "layout picture placeholder declares no geometry" }
-        val expected = ShapeBounds(
+        val layoutBounds = ShapeBounds(
             (xfrm.off.x as Number).toFloat() / 12700f,
             (xfrm.off.y as Number).toFloat() / 12700f,
             xfrm.ext.cx / 12700f,
@@ -738,8 +741,23 @@ class PptDocumentTest {
             idx = slotXml.nvSpPr.nvPr.ph.idx
         }
         if (picture.spPr.isSetXfrm) picture.spPr.unsetXfrm()
+        return PptFixtures.bytesOf(ppt) to layoutBounds
+    }
 
-        val decoration = model(PptFixtures.bytesOf(ppt)).decorations.filterIsInstance<PptDocument.PictureDecoration>().single()
-        assertEquals(expected, decoration.bounds)
+    private fun pictureOf(bytes: ByteArray): PptDocument.PictureDecoration =
+        model(bytes).decorations.filterIsInstance<PptDocument.PictureDecoration>().single()
+
+    @Test
+    fun read_picturePlaceholderWithoutGeometry_inheritsLayouts() {
+        val (bytes, layoutBounds) = picturePlaceholderDeck()
+        assertEquals(layoutBounds, pictureOf(bytes).bounds)
+    }
+
+    @Test
+    fun movePicturePlaceholderWithoutGeometry_writesItsOwnGeometry() {
+        val (bytes, layoutBounds) = picturePlaceholderDeck()
+        val moved = layoutBounds.copy(x = layoutBounds.x + 36f)
+        val out = PptDocument.applyEditsAndSerialize(bytes, decorationBoundsEdits = mapOf((0 to 0) to moved))
+        assertEquals(moved, pictureOf(out).bounds)
     }
 }

@@ -97,8 +97,13 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
     class DecorationState(
         val decoration: PptDocument.SlideDecoration,
         bounds: PptDocument.ShapeBounds,
-        /** The geometry the file declares, or null when [bounds] is a fallback. */
-        val savedBounds: PptDocument.ShapeBounds? = decoration.bounds,
+        /**
+         * Where the decoration stood on load: the file's geometry, or the fallback
+         * the editor drew it at when the file declares none. A decoration is written
+         * back only once it moves from here, so one the user never touched keeps
+         * its markup, fallback or not.
+         */
+        val savedBounds: PptDocument.ShapeBounds = bounds,
     ) {
         var bounds by mutableStateOf(bounds)
         val boundsChanged: Boolean get() = bounds != savedBounds
@@ -333,12 +338,7 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
         val existing = currentSlideState
         fun shape(index: Int, text: String) =
             ShapeState(TextFieldValue(text), bounds = fallbackBounds(index), defaultColorHex = existing?.textColorHex)
-        val newShapes = when (layout) {
-            PptDocument.PresetLayout.TITLE -> mutableListOf(shape(0, "Title"), shape(1, "Subtitle"))
-            PptDocument.PresetLayout.TITLE_AND_CONTENT -> mutableListOf(shape(0, "Title"), shape(1, "Content"))
-            PptDocument.PresetLayout.SECTION_HEADER -> mutableListOf(shape(0, "Section Header"))
-            PptDocument.PresetLayout.BLANK -> mutableListOf()
-        }
+        val newShapes = layout.placeholderTexts.mapIndexed(::shape).toMutableList()
         val insertAt = currentSlide + 1
         slideStates.add(
             insertAt,

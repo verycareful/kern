@@ -135,4 +135,14 @@ class PptEditorViewModelTest {
         assertTrue(state.boundsChanged)
         assertTrue("a copy keeps the move", state.copy().boundsChanged)
     }
+
+    @Test
+    fun decorationWithoutGeometry_isUnchangedAtItsFallback_untilMoved() {
+        // Nothing in the file places it, so the editor draws it at a spot of its own.
+        val decoration = PptDocument.UnsupportedDecoration("Grouped shapes", null)
+        val state = DecorationState(decoration, bounds)
+        assertFalse(state.boundsChanged)
+        state.bounds = bounds.copy(x = 40f)
+        assertTrue(state.boundsChanged)
+    }
 }

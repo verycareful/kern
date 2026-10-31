@@ -38,18 +38,23 @@ object PptRichText {
         return withAlignments(text, alignments)
     }
 
-    /** [text] with its paragraph styles replaced by [alignments], one per paragraph. */
-    private fun withAlignments(text: AnnotatedString, alignments: List<TextAlign?>): AnnotatedString {
-        if (alignments.all { it == null }) return AnnotatedString(text.text, text.spanStyles, emptyList())
-        val paragraphs = ArrayList<AnnotatedString.Range<ParagraphStyle>>()
-        paragraphRanges(text.text).forEachIndexed { i, range ->
-            val align = alignments.getOrNull(i) ?: return@forEachIndexed
-            if (range.last >= range.first) {
-                paragraphs += AnnotatedString.Range(ParagraphStyle(textAlign = align), range.first, range.last + 1)
+    /**
+     * [text] with its paragraph styles replaced by [alignments], one per paragraph.
+     * The span styles and the string annotations carry over: a run's font name lives
+     * in an annotation, since a SpanStyle holds only the Compose font it maps to.
+     */
+    private fun withAlignments(text: AnnotatedString, alignments: List<TextAlign?>): AnnotatedString =
+        buildAnnotatedString {
+            append(text.text)
+            for (span in text.spanStyles) addStyle(span.item, span.start, span.end)
+            for (note in text.getStringAnnotations(0, text.length)) {
+                addStringAnnotation(note.tag, note.item, note.start, note.end)
+            }
+            paragraphRanges(text.text).forEachIndexed { i, range ->
+                val align = alignments.getOrNull(i) ?: return@forEachIndexed
+                if (range.last >= range.first) addStyle(ParagraphStyle(textAlign = align), range.first, range.last + 1)
             }
         }
-        return AnnotatedString(text.text, text.spanStyles, paragraphs)
-    }
 
     /** Each paragraph's character range, the trailing newline included; may be empty. */
     private fun paragraphRanges(text: String): List<IntRange> {
