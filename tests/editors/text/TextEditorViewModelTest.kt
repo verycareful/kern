@@ -19,7 +19,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Load, edit, undo and save through the editor's ViewModel against a real file. */
+/** Load, edit, undo and save through the editor's ViewModel against a real file; which files get the preview. */
 @OptIn(ExperimentalFoundationApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -129,6 +129,20 @@ class TextEditorViewModelTest {
         vm.start(Uri.encode(Uri.fromFile(File(dir, "absent.md").absoluteFile).toString()), DocumentFormat.MARKDOWN)
         waitFor { !vm.loading }
         assertNotNull(vm.error)
+    }
+
+    @Test
+    fun markdownFormat_alwaysPreviews() {
+        assertTrue(TextEditorViewModel.isMarkdown(DocumentFormat.MARKDOWN, "document"))
+    }
+
+    @Test
+    fun textFormat_previewsWhenTheNameSaysMarkdown() {
+        assertTrue(TextEditorViewModel.isMarkdown(DocumentFormat.TEXT, "README.md"))
+        assertTrue(TextEditorViewModel.isMarkdown(DocumentFormat.TEXT, "notes.MARKDOWN"))
+        assertFalse(TextEditorViewModel.isMarkdown(DocumentFormat.TEXT, "notes.txt"))
+        assertFalse(TextEditorViewModel.isMarkdown(DocumentFormat.TEXT, "guide.rst"))
+        assertFalse(TextEditorViewModel.isMarkdown(DocumentFormat.TEXT, "no-extension"))
     }
 
     private companion object {

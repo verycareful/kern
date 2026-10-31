@@ -2,12 +2,20 @@
    properties set on :root by the page; everything else follows GitHub's layout
    so documents written for GitHub read the same here. */
 
+/* Kern's own faces: Outfit for text, IBM Plex Mono for code, as in the app. */
+@font-face { font-family: "Outfit"; font-weight: 400; src: url(fonts/outfit_regular.ttf) format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 500; src: url(fonts/outfit_medium.ttf) format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 600; src: url(fonts/outfit_semibold.ttf) format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 700; src: url(fonts/outfit_bold.ttf) format("truetype"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url(fonts/ibm_plex_mono_regular.ttf) format("truetype"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url(fonts/ibm_plex_mono_semibold.ttf) format("truetype"); }
+
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.6 -apple-system, "Segoe UI", Roboto, "Noto Sans", Helvetica, Arial, sans-serif;
+  font: 16px/1.6 "Outfit", sans-serif;
   word-wrap: break-word;
 }
 .markdown-body { padding: 16px 18px 48px; max-width: 980px; margin: 0 auto; }
@@ -41,7 +49,7 @@ blockquote { margin-left: 0; padding: 0 1em; color: var(--muted); border-left: .
 blockquote > :last-child { margin-bottom: 0; }
 
 code, kbd, pre, samp, tt {
-  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 85%;
 }
 code { padding: .2em .4em; background: var(--surface); border-radius: 6px; }

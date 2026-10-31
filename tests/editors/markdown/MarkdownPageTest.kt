@@ -1,16 +1,12 @@
 package dev.kern.editors.markdown
 
 import java.io.File
-import java.util.Base64
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
-/** The preview page's security policy, assets and theme, and local image inlining. */
+/** The preview page's security policy, assets and theme. */
 class MarkdownPageTest {
 
     private val theme = MarkdownPage.Theme(
@@ -57,38 +53,13 @@ class MarkdownPageTest {
         for (ref in refs) assertTrue(ref, File("assets/preview/$ref").isFile)
     }
 
-    private lateinit var dir: File
-
-    @Before
-    fun makeDir() {
-        dir = File("build/tmp/markdown-page-test").apply { deleteRecursively(); mkdirs() }
-    }
-
-    @After
-    fun removeDir() {
-        dir.deleteRecursively()
-    }
-
     @Test
-    fun resolver_inlinesLocalImages_includingParentFolders_andEncodedNames() {
-        val png = byteArrayOf(1, 2, 3)
-        File(dir, "docs").mkdirs()
-        File(dir, "logo.png").writeBytes(png)
-        File(dir, "docs/my pic.JPG").writeBytes(png)
-        val resolver = FileImageResolver(File(dir, "docs"))
-        val encoded = Base64.getEncoder().encodeToString(png)
-        assertEquals("data:image/png;base64,$encoded", resolver.dataUri("../logo.png"))
-        assertEquals("data:image/jpeg;base64,$encoded", resolver.dataUri("my%20pic.JPG"))
-        assertEquals("data:image/jpeg;base64,$encoded", resolver.dataUri("my pic.JPG?raw=true"))
-    }
-
-    @Test
-    fun resolver_refusesMissing_nonImage_andOversizedFiles() {
-        File(dir, "notes.txt").writeText("x")
-        File(dir, "big.png").writeBytes(ByteArray(11))
-        val resolver = FileImageResolver(dir, maxBytes = 10)
-        assertNull(resolver.dataUri("missing.png"))
-        assertNull(resolver.dataUri("notes.txt"))
-        assertNull(resolver.dataUri("big.png"))
+    fun previewStylesheet_usesKernFonts_andBundlesThem() {
+        val css = File("assets/preview/preview.css").readText()
+        assertTrue(css.contains("font: 16px/1.6 \"Outfit\""))
+        assertTrue(css.contains("font-family: \"IBM Plex Mono\""))
+        val urls = Regex("url\\(([^)]+)\\)").findAll(css).map { it.groupValues[1] }.toList()
+        assertTrue(urls.isNotEmpty())
+        for (url in urls) assertTrue(url, File("assets/preview/$url").isFile)
     }
 }

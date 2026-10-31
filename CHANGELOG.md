@@ -2,6 +2,21 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.12.1] - 2026-10-31 22:05 IST
+
+### Changed
+- **Edit and Preview Switch**: floats over the top corner of the document instead of taking a row of its own, and fades out when the document has been still for a moment; scrolling or touching the document brings it back
+- **Preview Fonts**: the Markdown preview sets text in Outfit and code in IBM Plex Mono, the faces the rest of Kern uses, bundled with the preview so they work offline. The editor keeps IBM Plex Mono
+- `README.md`: KaTeX, Mermaid and highlight.js badges for the libraries bundled with the preview
+
+### Tests
+- `previewStylesheet_usesKernFonts_andBundlesThem`: the preview stylesheet names Outfit and IBM Plex Mono and every font file it loads is bundled
+- `emojiTable_skipsMalformedLines`, `mimeFor_knowsImageTypesOnly`: emoji table parsing and image type detection
+- Emoji table and image resolver tests now live in `MarkdownAssetsTest.kt`, and the preview routing tests in `TextEditorViewModelTest.kt`, mirroring the files they cover
+
+### Results
+- 245 tests across 19 suites, all passed (23s, local Gradle `testDebugUnitTest`); lint clean
+
 ## [0.1.12.0] - 2026-10-31 21:50 IST
 
 ### Added

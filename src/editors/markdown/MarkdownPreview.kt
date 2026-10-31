@@ -12,7 +12,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -28,20 +30,24 @@ import java.io.ByteArrayInputStream
  * it and the bundled assets. Requests for anything outside the asset folder get
  * an empty answer here, before reaching the network. Tapping a web, mail or phone
  * link opens it in the app the system picks for it; links inside the page are
- * handled by the page itself.
+ * handled by the page itself. [onScroll] is called as the page scrolls.
  */
 @Composable
 fun MarkdownPreview(
     rendered: MarkdownRenderer.Rendered,
     colors: KernColorScheme,
     modifier: Modifier = Modifier,
+    onScroll: () -> Unit = {},
 ) {
+    val currentOnScroll by rememberUpdatedState(onScroll)
     val theme = remember(colors) { colors.toPreviewTheme() }
     val page = remember(rendered, theme) { MarkdownPage.build(rendered, theme) }
     val background = colors.bg.toArgb()
     AndroidView(
         modifier = modifier,
-        factory = { context -> createWebView(context) },
+        factory = { context ->
+            createWebView(context).apply { setOnScrollChangeListener { _, _, _, _, _ -> currentOnScroll() } }
+        },
         update = { view ->
             view.setBackgroundColor(background)
             if (view.tag != page) {

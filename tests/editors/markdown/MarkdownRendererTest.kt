@@ -140,10 +140,4 @@ class MarkdownRendererTest {
         assertFalse(MarkdownRenderer.isDocumentRelative("data:image/png;base64,AA"))
         assertFalse(MarkdownRenderer.isDocumentRelative(""))
     }
-
-    @Test
-    fun bundledEmojiTable_isComplete() {
-        assertTrue(emoji.size > 1800)
-        assertEquals("🎉", emoji["tada"])
-    }
 }

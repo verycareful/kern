@@ -2,12 +2,31 @@ package dev.kern.editors.text
 
 import android.app.Activity
 import android.view.WindowManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import dev.kern.shared.theme.KernRadius
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
@@ -77,35 +96,98 @@ fun TextEditorScreen(
         onExportToUri = vm::exportTo,
         toolbar = if (editing) ({ SourceToolbar(vm) }) else null,
     ) { modifier ->
-        Column(modifier.background(KernTheme.colors.bg)) {
-            if (vm.markdown) ModeSwitch(vm)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (editing) SourceEditor(vm) else PreviewPane(vm)
+        val switch = rememberAutoHide()
+        Box(modifier.background(KernTheme.colors.bg).revealOnTouch(switch)) {
+            if (editing) SourceEditor(vm, onScroll = switch::reveal) else PreviewPane(vm, onScroll = switch::reveal)
+            if (vm.markdown) {
+                AnimatedVisibility(
+                    visible = switch.visible,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 12.dp),
+                ) {
+                    ModeSwitch(vm, onSwitch = switch::reveal)
+                }
             }
         }
     }
 }
 
+/**
+ * The Edit / Preview switch. It floats over the top corner of the document rather
+ * than taking a row of its own, and fades out once the document has been still
+ * for [SWITCH_HIDE_DELAY_MS]; scrolling or touching the document brings it back.
+ */
 @Composable
-private fun ModeSwitch(vm: TextEditorViewModel) {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-        KernSegmented(
-            items = listOf(SegmentItem("Edit", KernIcons.Pen), SegmentItem("Preview", KernIcons.Preview)),
-            selectedIndex = if (vm.mode == TextEditorViewModel.Mode.EDIT) 0 else 1,
-            onSelect = { if (it == 0) vm.showEditor() else vm.showPreview() },
-        )
+private fun ModeSwitch(vm: TextEditorViewModel, onSwitch: () -> Unit) {
+    KernSegmented(
+        items = listOf(SegmentItem("Edit", KernIcons.Pen), SegmentItem("Preview", KernIcons.Preview)),
+        selectedIndex = if (vm.mode == TextEditorViewModel.Mode.EDIT) 0 else 1,
+        onSelect = {
+            if (it == 0) vm.showEditor() else vm.showPreview()
+            onSwitch()
+        },
+        modifier = Modifier.shadow(SWITCH_ELEVATION, RoundedCornerShape(KernRadius.segmentTrack)),
+    )
+}
+
+/** How long the switch stays after the last scroll or touch. */
+private const val SWITCH_HIDE_DELAY_MS = 2_500L
+private val SWITCH_ELEVATION = 6.dp
+
+/** Visibility of a control that shows on activity and fades out after a pause. */
+@Stable
+private class AutoHide {
+    var visible by mutableStateOf(true)
+        private set
+    var activity by mutableIntStateOf(0)
+        private set
+
+    fun reveal() {
+        visible = true
+        activity++
+    }
+
+    fun hide() {
+        visible = false
     }
 }
 
 @Composable
-private fun SourceEditor(vm: TextEditorViewModel) {
+private fun rememberAutoHide(): AutoHide {
+    val autoHide = remember { AutoHide() }
+    LaunchedEffect(autoHide) {
+        snapshotFlow { autoHide.activity }.collectLatest {
+            delay(SWITCH_HIDE_DELAY_MS)
+            autoHide.hide()
+        }
+    }
+    return autoHide
+}
+
+/** Reveals [autoHide] on every touch inside, without taking the touch from the content. */
+private fun Modifier.revealOnTouch(autoHide: AutoHide): Modifier = pointerInput(autoHide) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        autoHide.reveal()
+    }
+}
+
+@Composable
+private fun SourceEditor(vm: TextEditorViewModel, onScroll: () -> Unit) {
     val colors = KernTheme.colors
     val highlight = remember(colors, vm.markdown) {
         if (vm.markdown) markdownHighlighting(colors) else null
     }
+    val scroll = rememberScrollState()
+    val currentOnScroll by rememberUpdatedState(onScroll)
+    LaunchedEffect(scroll) {
+        snapshotFlow { scroll.value }.drop(1).collect { currentOnScroll() }
+    }
     BasicTextField(
         state = vm.state,
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        scrollState = scroll,
         textStyle = TextStyle(
             fontFamily = PlexMonoFamily,
             fontSize = 14.sp,
@@ -119,14 +201,14 @@ private fun SourceEditor(vm: TextEditorViewModel) {
 }
 
 @Composable
-private fun PreviewPane(vm: TextEditorViewModel) {
+private fun PreviewPane(vm: TextEditorViewModel, onScroll: () -> Unit) {
     val rendered = vm.preview
     if (rendered == null) {
         Box(Modifier.fillMaxSize()) {
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = KernTheme.colors.accent)
         }
     } else {
-        MarkdownPreview(rendered, KernTheme.colors, Modifier.fillMaxSize())
+        MarkdownPreview(rendered, KernTheme.colors, Modifier.fillMaxSize(), onScroll = onScroll)
     }
 }
 

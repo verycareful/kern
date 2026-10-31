@@ -19,6 +19,11 @@
 [![OpenCSV](https://img.shields.io/badge/OpenCSV-5.12.0-08427B?style=flat-square)](https://opencsv.sourceforge.net/)
 [![jsoup](https://img.shields.io/badge/jsoup-1.23.2-1D9BF0?style=flat-square)](https://jsoup.org/)
 [![commonmark-java](https://img.shields.io/badge/commonmark--java-0.30.1-000000?style=flat-square&logo=markdown&logoColor=white)](https://github.com/commonmark/commonmark-java)
+<!-- Markdown preview (bundled under assets/preview) -->
+<!-- KaTeX and highlight.js have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
+[![KaTeX](https://img.shields.io/badge/KaTeX-0.19.0-329894?style=flat-square)](https://katex.org/)
+[![Mermaid](https://img.shields.io/badge/Mermaid-12.1.0-FF3670?style=flat-square&logo=mermaid&logoColor=white)](https://mermaid.js.org/)
+[![highlight.js](https://img.shields.io/badge/highlight.js-11.12.0-2F3337?style=flat-square)](https://highlightjs.org/)
 <!-- PDF engine -->
 <!-- Qyra and MuPDF have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
 [![Qyra](https://img.shields.io/badge/Qyra-JNI%2FNDK%20bridge-DEA584?style=flat-square&logo=rust&logoColor=white)](https://github.com/zParik/Qyra)
