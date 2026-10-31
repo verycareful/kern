@@ -100,11 +100,16 @@ object PptDocument {
         val anchor: String? = null,
     )
 
-    enum class PresetLayout {
-        TITLE,
-        TITLE_AND_CONTENT,
-        SECTION_HEADER,
-        BLANK,
+    /**
+     * The layouts a new slide can start from. [placeholderTexts] is the text of each
+     * box the slide starts with, in shape order: the editor shows these boxes and the
+     * writer creates them, so both read the one list.
+     */
+    enum class PresetLayout(val placeholderTexts: List<String>) {
+        TITLE(listOf("Title", "Subtitle")),
+        TITLE_AND_CONTENT(listOf("Title", "Content")),
+        SECTION_HEADER(listOf("Section Header")),
+        BLANK(emptyList()),
     }
 
     /**
@@ -330,15 +335,7 @@ object PptDocument {
                         // createSlide appends; the editor inserted after the current slide,
                         // and later edits are addressed by that position.
                         if (op.atIndex in ppt.slides.indices) ppt.setSlideOrder(newSlide, op.atIndex)
-                        val tb = newSlide.createTextBox()
-                        if (op.layout == PresetLayout.TITLE) {
-                            tb.setText("Title")
-                        } else if (op.layout == PresetLayout.TITLE_AND_CONTENT) {
-                            tb.setText("Title")
-                            newSlide.createTextBox().setText("Content")
-                        } else if (op.layout == PresetLayout.SECTION_HEADER) {
-                            tb.setText("Section Header")
-                        }
+                        for (text in op.layout.placeholderTexts) newSlide.createTextBox().setText(text)
                     }
                     is DeleteSlide -> {
                         if (ppt.slides.size > 1 && op.slideIndex in ppt.slides.indices) {
@@ -474,7 +471,7 @@ object PptDocument {
         val embedId = spPr.blipFill?.blip?.embed?.takeIf { it.isNotBlank() } ?: return null
         val picture = shape.sheet?.getRelationById(embedId) as? XSLFPictureData ?: return null
         val bytes = picture.data?.takeIf { it.isNotEmpty() } ?: return null
-        return PictureDecoration(bytes, picture.fileName, boundsOfXml(shape.xmlObject), fillsShape = true)
+        return PictureDecoration(bytes, picture.fileName, boundsOf(shape), fillsShape = true)
     }
 
     /**
@@ -521,7 +518,7 @@ object PptDocument {
             val value = guide.fmla?.removePrefix("val ")?.trim()?.toIntOrNull() ?: return@mapNotNull null
             name to value
         }.toMap()
-        val bounds = (shape as? XSLFTextShape)?.let { boundsOf(it) } ?: boundsOfXml(xml)
+        val bounds = boundsOf(shape)
         return GeometryDecoration(preset, fill, outline, adjustments, bounds)
     }
 
@@ -640,15 +637,15 @@ object PptDocument {
     private fun decorationOf(shape: XSLFShape, theme: PptTheme?): SlideDecoration? = when (shape) {
         is XSLFPictureShape -> shape.pictureData?.data
             ?.takeIf { it.isNotEmpty() }
-            ?.let { PictureDecoration(it, shape.pictureData?.fileName, boundsOfXml(shape.xmlObject)) }
+            ?.let { PictureDecoration(it, shape.pictureData?.fileName, boundsOf(shape)) }
 
         is XSLFTable -> TableDecoration(
             rows = shape.rows.map { row -> row.cells.map { it.text ?: "" } },
-            bounds = boundsOfXml(shape.xmlObject),
+            bounds = boundsOf(shape),
         )
 
-        is XSLFGraphicFrame -> UnsupportedDecoration("Chart or diagram", boundsOfXml(shape.xmlObject))
-        is XSLFGroupShape -> UnsupportedDecoration("Grouped shapes", boundsOfXml(shape.xmlObject))
+        is XSLFGraphicFrame -> UnsupportedDecoration("Chart or diagram", boundsOf(shape))
+        is XSLFGroupShape -> UnsupportedDecoration("Grouped shapes", boundsOf(shape))
         // An autoshape: either its surface is an image, which is how a full-slide
         // backdrop is normally authored, or it is preset geometry with a fill or
         // outline of its own.
@@ -661,18 +658,19 @@ object PptDocument {
      * Geometry sits on the shape when it was placed explicitly, and is inherited from
      * the slide layout's matching placeholder when it was not, which is the normal case
      * for the title and body of a deck built from a template. Reading only the first of
-     * those leaves every inherited placeholder with no position at all.
+     * those leaves every inherited placeholder with no position at all. Pictures,
+     * tables and charts fill placeholders too, so this serves every kind of shape.
      *
      * POI exposes the resolved rectangle as getAnchor(), but that returns
      * java.awt.geom.Rectangle2D and Android ships no java.awt.geom, so this reads the
      * typed OOXML accessors instead. Do not replace it with shape.anchor: it compiles
      * and then throws NoClassDefFoundError on a device.
      */
-    private fun boundsOf(shape: XSLFTextShape): ShapeBounds? {
+    private fun boundsOf(shape: XSLFShape): ShapeBounds? {
         boundsOfXml(shape.xmlObject)?.let { return it }
-        val slot = shape.placeholder ?: return null
+        val slot = shape.placeholderDetails?.placeholder ?: return null
         val layout = (shape.sheet as? XSLFSlide)?.slideLayout ?: return null
-        val inherited = layout.placeholders.firstOrNull { it.placeholder == slot } ?: return null
+        val inherited = layout.shapes.firstOrNull { it.placeholderDetails?.placeholder == slot } ?: return null
         return boundsOfXml(inherited.xmlObject)
     }
 

@@ -2,6 +2,22 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.11.2] - 2026-10-31 17:14 IST
+
+### Fixed
+- **PowerPoint Fonts**: a run's font name was dropped whenever its text was shown for editing, so every edited shape lost its fonts on save; it is now kept through loading, typing, restyling and realigning
+- **New Title Slide**: a slide inserted with the Title layout was saved with its title only; the subtitle the editor shows is now written too
+- **New Blank Slide**: a slide inserted with the Blank layout was saved with an empty text box the editor did not show; it now has no shapes. The text each layout starts with is defined once, for both the editor and the file
+- **Inherited Picture Positions**: a picture, table, chart or group filling a layout placeholder without geometry of its own had no position; it now takes the placeholder's position from the slide layout, as text placeholders already did
+- **Unmoved Shapes Rewritten**: a picture, table or chart with no position anywhere in the file was drawn at a default spot and that spot was written into the file on save, though nothing had moved it; it is now written only once the user moves it
+
+### Tests
+- `movePicturePlaceholderWithoutGeometry_writesItsOwnGeometry`: moving a picture placeholder that inherits its geometry writes an explicit position that reads back
+- `decorationWithoutGeometry_isUnchangedAtItsFallback_untilMoved`: a shape drawn at the default spot is not a change until it moves
+
+### Results
+- 170 tests across 12 suites, all passed (17s, local Gradle `testDebugUnitTest`); lint clean
+
 ## [0.1.11.1] - 2026-10-31 16:53 IST
 
 ### Tests

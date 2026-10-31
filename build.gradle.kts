@@ -13,8 +13,8 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "0.1.11.1"
+        versionCode = 29
+        versionName = "0.1.11.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
