@@ -78,6 +78,7 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val colors = KernTheme.colors
     val settings = LocalKernSettings.current
     var showLicense by remember { mutableStateOf(false) }
+    var showNotices by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().background(colors.bg).statusBarsPadding().navigationBarsPadding()) {
         SettingsHeader(onBack = onBack)
@@ -99,12 +100,13 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 onScanDownloads = settings::updateScanDownloads,
             )
             PrivacyGroup()
-            AboutGroup(onShowLicense = { showLicense = true })
+            AboutGroup(onShowLicense = { showLicense = true }, onShowNotices = { showNotices = true })
             Spacer(Modifier.height(BottomSpacer))
         }
     }
 
     if (showLicense) LicenseDialog(onDismiss = { showLicense = false })
+    if (showNotices) NoticesDialog(onDismiss = { showNotices = false })
 }
 
 @Composable

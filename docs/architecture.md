@@ -60,6 +60,10 @@ The page's content security policy runs only the bundled scripts: script tags, e
 
 Text files are saved in the encoding, byte order mark and line endings they were opened with, so an unedited file is written back byte for byte.
 
+## Open source notices
+
+Settings > Notices shows the licence of everything in the app. A build task (`generate<Variant>Notices` in `build.gradle.kts`) writes them into the assets: for each runtime library, the licence and notice files from its jar and the licence its POM names, with `licenses/libraries/` and `licenses/common/` filling in where a jar has none; and for bundled fonts and preview assets, the entries in `licenses/index.tsv`.
+
 ## Data flow
 
 1. User taps a file in the browser, or shares a file to Kern via "Open with".
