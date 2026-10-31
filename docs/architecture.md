@@ -77,7 +77,8 @@ Text files are saved in the encoding, byte order mark and line endings they were
 | jsoup | EPUB XHTML, Markdown image inlining | MIT |
 | commonmark-java | Markdown parsing and HTML rendering | BSD-2-Clause |
 | KaTeX (bundled asset) | Maths in the Markdown preview | MIT |
-| Mermaid (bundled asset) | Diagrams in the Markdown preview | MIT |
+| Mermaid (bundled asset, built by `scripts/mermaid/build.mjs`) | Diagrams in the Markdown preview | MIT |
+| elkjs (inside the Mermaid bundle) | ELK diagram layout | GPL-3.0-or-later (offered with EPL-2.0) |
 | highlight.js (bundled asset) | Code colouring in the Markdown preview | BSD-3-Clause |
 | gemoji (bundled data) | Emoji shortcode list | MIT |
 | Jetpack Compose | UI | Apache 2.0 |

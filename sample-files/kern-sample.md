@@ -158,6 +158,33 @@ flowchart LR
     C --> E[Edit]
 ```
 
+The same kind of flowchart laid out by the ELK engine:
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+    Source[Markdown source] --> Parse[Parse]
+    Parse --> Html[HTML body]
+    Parse --> Math[Maths]
+    Html --> Page[Preview page]
+    Math --> Page
+    Page --> Screen[Screen]
+```
+
+```mermaid
+mindmap
+  root((Kern))
+    Documents
+      Word
+      PowerPoint
+    Text
+      Markdown
+      Plain text
+```
+
 ```mermaid
 sequenceDiagram
     participant U as User

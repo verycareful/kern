@@ -2,18 +2,19 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
-## [0.1.12.0] - 2026-10-31 22:16 IST
+## [0.1.12.0] - 2026-10-31 22:37 IST
 
 ### Added
 - **Markdown Editor** (`src/editors/text/`): opens `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` and `.mdx` files as raw Markdown with Edit and Preview modes; Markdown files open in Preview. A small Edit and Preview switch floats over the top corner of the document and fades out once the document has been still for a moment; scrolling or touching the document brings it back. The source is set in IBM Plex Mono and coloured as you type (headings, emphasis, code, links, lists, quotes, maths, HTML), and a toolbar inserts or toggles bold, italic, strikethrough, inline code, headings (cycling `#` to `######`), bulleted, numbered and task lists, quotes, links, images, code blocks, tables and rules. Undo and redo cover typing and toolbar edits
-- **Markdown Preview** (`src/editors/markdown/`): renders CommonMark with the GitHub additions: tables with column alignment, task lists, strikethrough, autolinks, footnotes (including inline `^[...]`), alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), heading anchors with in-page links, YAML front matter shown as a table, raw HTML (`<details>`, `<kbd>`, `<sub>`, `<sup>`, `<mark>`, `<img width>` and the rest), `$...$` and `$$...$$` maths and `math` fences typeset with KaTeX, `mermaid` fences drawn as diagrams, fenced code coloured by language with highlight.js, and `:shortcode:` emoji. Images beside the file (including `../` paths) are shown; web images show a labelled placeholder. Text is set in Outfit and code in IBM Plex Mono, Kern's own faces, bundled with the preview; light and dark themes follow the app. Web, mail and phone links open in the app the system picks
+- **Markdown Preview** (`src/editors/markdown/`): renders CommonMark with the GitHub additions: tables with column alignment, task lists, strikethrough, autolinks, footnotes (including inline `^[...]`), alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), heading anchors with in-page links, YAML front matter shown as a table, raw HTML (`<details>`, `<kbd>`, `<sub>`, `<sup>`, `<mark>`, `<img width>` and the rest), `$...$` and `$$...$$` maths and `math` fences typeset with KaTeX, `mermaid` fences drawn as diagrams (including ELK layouts and mindmaps), fenced code coloured by language with highlight.js, and `:shortcode:` emoji. Images beside the file (including `../` paths) are shown; web images show a labelled placeholder. Text is set in Outfit and code in IBM Plex Mono, Kern's own faces, bundled with the preview; light and dark themes follow the app. Web, mail and phone links open in the app the system picks
 - **Plain Text Editor**: `.txt`, `.text`, `.rst` and `.org` files open in the same editor with undo and redo; a file sent as `text/plain` whose name ends in a Markdown extension gets the preview
 - **Faithful Saving** (`TextDocument.kt`): files are saved in the encoding they were opened in (UTF-8, UTF-8 or UTF-16 with a byte order mark, or ISO-8859-1 for bytes that are not valid UTF-8), keeping the byte order mark and the line endings (LF, CRLF or CR), so an unedited file is written back byte for byte; the unsaved mark clears when edits are undone back to the saved text
 - **Open With**: Kern is offered for `text/markdown`, `text/x-markdown`, `text/plain`, `text/x-rst` and `text/org` files, and the file browser lists and filters Markdown and text files
 - `sample-files/kern-sample.md`: a sample exercising every construct the preview renders
-- Bundled preview assets under `assets/preview/`: Outfit and IBM Plex Mono (OFL, as in `licenses/fonts/`), KaTeX 0.19.0 (MIT) with its fonts, Mermaid 12.1.0 (MIT), highlight.js 11.12.0 (BSD-3-Clause) and the gemoji 8.1.0 shortcode list (MIT); licence texts in `licenses/preview/`
+- Bundled preview assets under `assets/preview/`: Outfit and IBM Plex Mono (OFL, as in `licenses/fonts/`), KaTeX 0.19.0 (MIT) with its fonts, Mermaid 12.2.0 (MIT), highlight.js 11.12.0 (BSD-3-Clause) and the gemoji 8.1.0 shortcode list (MIT); licence texts in `licenses/preview/`
 - commonmark-java 0.30.1 (BSD-2-Clause) with its tables, strikethrough, alerts, task list, autolink, footnotes, heading anchor and YAML front matter extensions
-- `README.md`: Markdown and plain text formats; commonmark-java, KaTeX, Mermaid and highlight.js badges; licences of the bundled preview assets
+- `scripts/mermaid/`: builds the Mermaid bundle from a pinned lockfile with elkjs 0.12.1, used under GPL-3.0-or-later (Mermaid's own bundle carries elkjs 0.9, licensed EPL-2.0 only); the build stops if any bundled package has a licence outside an AGPL-compatible allowlist, and writes `licenses/preview/Mermaid-bundle-NOTICES.txt` with the licence of each of the 69 bundled packages. Rebuilding gives an identical file
+- `README.md`: Markdown and plain text formats; commonmark-java, KaTeX, Mermaid, elkjs and highlight.js badges; licences of the bundled preview assets
 - `docs/architecture.md`: the text and Markdown editor, the preview pipeline and its security model
 
 ### Security
@@ -30,7 +31,7 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 - **Formats** (`DocumentFormatTest.kt`, `ThemeTokensTest.kt`): Markdown and text extensions and MIME types, a file name deciding over `text/plain`, a specific MIME type deciding over the name, monograms
 
 ### Results
-- 245 tests across 19 suites, all passed (26s, local Gradle `testDebugUnitTest`); lint clean
+- 245 tests across 19 suites, all passed (33s, local Gradle `testDebugUnitTest`); lint clean
 
 ## [0.1.11.2] - 2026-10-31 17:14 IST
 

@@ -20,9 +20,10 @@
 [![jsoup](https://img.shields.io/badge/jsoup-1.23.2-1D9BF0?style=flat-square)](https://jsoup.org/)
 [![commonmark-java](https://img.shields.io/badge/commonmark--java-0.30.1-000000?style=flat-square&logo=markdown&logoColor=white)](https://github.com/commonmark/commonmark-java)
 <!-- Markdown preview (bundled under assets/preview) -->
-<!-- KaTeX and highlight.js have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
+<!-- KaTeX, elkjs and highlight.js have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
 [![KaTeX](https://img.shields.io/badge/KaTeX-0.19.0-329894?style=flat-square)](https://katex.org/)
-[![Mermaid](https://img.shields.io/badge/Mermaid-12.1.0-FF3670?style=flat-square&logo=mermaid&logoColor=white)](https://mermaid.js.org/)
+[![Mermaid](https://img.shields.io/badge/Mermaid-12.2.0-FF3670?style=flat-square&logo=mermaid&logoColor=white)](https://mermaid.js.org/)
+[![elkjs](https://img.shields.io/badge/elkjs-0.12.1-2C5F8A?style=flat-square)](https://github.com/kieler/elkjs)
 [![highlight.js](https://img.shields.io/badge/highlight.js-11.12.0-2F3337?style=flat-square)](https://highlightjs.org/)
 <!-- PDF engine -->
 <!-- Qyra and MuPDF have no shields.io logos. Swap these plain badges for logo badges if logos become available. -->
@@ -62,7 +63,10 @@ Kern works with common document types:
 - **Markdown preview:** [KaTeX](https://katex.org/) (MIT), [Mermaid](https://mermaid.js.org/) (MIT),
 [highlight.js](https://highlightjs.org/) (BSD-3-Clause) and the [gemoji](https://github.com/wooorm/gemoji)
 shortcode list (MIT) ship inside the app under `assets/preview/`; their licence texts are in
-`licenses/preview/`.
+`licenses/preview/`. Mermaid is built by `scripts/mermaid/build.mjs` with
+[elkjs](https://github.com/kieler/elkjs) 0.12.1, used under GPL-3.0-or-later (it is also offered
+under EPL-2.0); the licences of everything in that bundle are in
+`licenses/preview/Mermaid-bundle-NOTICES.txt`.
 
 **PDF engine:** MuPDF via the [Qyra](https://github.com/zParik/Qyra) Rust JNI/NDK bridge (GPL-3.0)
 - **License:** AGPL-3.0
@@ -129,7 +133,10 @@ See the [LICENSE](LICENSE) file for the full license text.
 **Markdown preview:** [KaTeX](https://katex.org/) (MIT), [Mermaid](https://mermaid.js.org/) (MIT),
 [highlight.js](https://highlightjs.org/) (BSD-3-Clause) and the [gemoji](https://github.com/wooorm/gemoji)
 shortcode list (MIT) ship inside the app under `assets/preview/`; their licence texts are in
-`licenses/preview/`.
+`licenses/preview/`. Mermaid is built by `scripts/mermaid/build.mjs` with
+[elkjs](https://github.com/kieler/elkjs) 0.12.1, used under GPL-3.0-or-later (it is also offered
+under EPL-2.0); the licences of everything in that bundle are in
+`licenses/preview/Mermaid-bundle-NOTICES.txt`.
 
 **PDF engine:** MuPDF via the [Qyra](https://github.com/zParik/Qyra) Rust JNI/NDK
 bridge, licensed GPL-3.0. GPL-3.0 code inside an AGPL-3.0 project is compatible;
