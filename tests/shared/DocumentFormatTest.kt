@@ -17,6 +17,12 @@ class DocumentFormatTest {
         assertEquals(DocumentFormat.POWERPOINT, DocumentFormat.fromExtension("pptx"))
         assertEquals(DocumentFormat.PDF, DocumentFormat.fromExtension("pdf"))
         assertEquals(DocumentFormat.EPUB, DocumentFormat.fromExtension("epub"))
+        for (ext in listOf("md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdx")) {
+            assertEquals(ext, DocumentFormat.MARKDOWN, DocumentFormat.fromExtension(ext))
+        }
+        for (ext in listOf("txt", "text", "rst", "org")) {
+            assertEquals(ext, DocumentFormat.TEXT, DocumentFormat.fromExtension(ext))
+        }
     }
 
     @Test
@@ -28,7 +34,7 @@ class DocumentFormatTest {
 
     @Test
     fun fromExtension_returns_null_for_unknown() {
-        assertNull(DocumentFormat.fromExtension("txt"))
+        assertNull(DocumentFormat.fromExtension("zip"))
         assertNull(DocumentFormat.fromExtension(""))
     }
 
@@ -41,6 +47,35 @@ class DocumentFormatTest {
             DocumentFormat.EXCEL,
             DocumentFormat.fromMimeType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         )
+    }
+
+    @Test
+    fun fromMimeType_maps_text_types() {
+        assertEquals(DocumentFormat.MARKDOWN, DocumentFormat.fromMimeType("text/markdown"))
+        assertEquals(DocumentFormat.MARKDOWN, DocumentFormat.fromMimeType("text/x-markdown"))
+        assertEquals(DocumentFormat.TEXT, DocumentFormat.fromMimeType("text/plain"))
+        assertEquals(DocumentFormat.TEXT, DocumentFormat.fromMimeType("text/x-rst"))
+    }
+
+    @Test
+    fun resolve_prefers_the_file_name_over_plain_text() {
+        assertEquals(DocumentFormat.MARKDOWN, DocumentFormat.resolve("text/plain", "README.md"))
+        assertEquals(DocumentFormat.TEXT, DocumentFormat.resolve("text/plain", "notes.txt"))
+        assertEquals(DocumentFormat.TEXT, DocumentFormat.resolve("text/plain", "document/1234"))
+    }
+
+    @Test
+    fun resolve_keeps_a_specific_mime_type_and_falls_back_to_the_name() {
+        assertEquals(DocumentFormat.PDF, DocumentFormat.resolve("application/pdf", "scan.md"))
+        assertEquals(DocumentFormat.MARKDOWN, DocumentFormat.resolve(null, "primary:Download/notes.md"))
+        assertEquals(DocumentFormat.MARKDOWN, DocumentFormat.resolve("application/octet-stream", "notes.markdown"))
+        assertNull(DocumentFormat.resolve("application/octet-stream", "archive.zip"))
+        assertNull(DocumentFormat.resolve(null, null))
+    }
+
+    @Test
+    fun only_markdown_has_a_preview() {
+        assertEquals(listOf(DocumentFormat.MARKDOWN), DocumentFormat.entries.filter { it.hasPreview })
     }
 
     @Test

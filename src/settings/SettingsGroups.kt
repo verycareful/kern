@@ -187,7 +187,7 @@ internal fun PrivacyGroup() {
 }
 
 @Composable
-internal fun AboutGroup(onShowLicense: () -> Unit) {
+internal fun AboutGroup(onShowLicense: () -> Unit, onShowNotices: () -> Unit) {
     val context = LocalContext.current
     SettingsGroup("About") {
         SettingsRow(
@@ -203,6 +203,14 @@ internal fun AboutGroup(onShowLicense: () -> Unit) {
             sublabel = "Tap to read the full text",
             onClick = onShowLicense,
             trailing = { TrailingMeta(LICENSE_LABEL) },
+        )
+        KernDivider()
+        SettingsRow(
+            icon = KernIcons.List,
+            label = "Notices",
+            sublabel = "Licences of the open source software in Kern",
+            onClick = onShowNotices,
+            trailing = { TrailingIcon(KernIcons.Chevron) },
         )
         KernDivider()
         SettingsRow(

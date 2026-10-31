@@ -20,8 +20,11 @@ import androidx.compose.material.icons.outlined.BorderColor
 import androidx.compose.material.icons.outlined.CallMerge
 import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
@@ -38,12 +41,13 @@ import androidx.compose.material.icons.outlined.FormatBold
 import androidx.compose.material.icons.outlined.FormatColorText
 import androidx.compose.material.icons.outlined.FormatItalic
 import androidx.compose.material.icons.outlined.FormatListNumbered
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.FormatStrikethrough
 import androidx.compose.material.icons.outlined.FormatUnderlined
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.HorizontalRule
 import androidx.compose.material.icons.outlined.Image
-
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Link
@@ -61,9 +65,11 @@ import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.outlined.VerticalAlignCenter
 import androidx.compose.material.icons.outlined.VerticalAlignTop
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.ui.graphics.Color
@@ -145,6 +151,13 @@ object KernIcons {
     val Link = Icons.Outlined.Link
     val Pin = Icons.Outlined.PushPin
     val WifiOff = Icons.Outlined.WifiOff
+    val Code = Icons.Outlined.Code
+    val CodeBlock = Icons.Outlined.DataObject
+    val Heading = Icons.Outlined.Title
+    val Checklist = Icons.Outlined.Checklist
+    val Quote = Icons.Outlined.FormatQuote
+    val Rule = Icons.Outlined.HorizontalRule
+    val Preview = Icons.Outlined.Visibility
 
     /** GitHub mark: not in Material, built from the handoff path data. */
     val Github: ImageVector by lazy {

@@ -15,6 +15,9 @@ Kern is a single-Activity Android app built with Kotlin and Jetpack Compose. It 
 | Word editor | `src/editors/word/` | Apache POI docx |
 | PowerPoint editor | `src/editors/pptx/` | Apache POI pptx |
 | PDF editor | `src/editors/pdf/` | Compose PDF UI |
+| EPUB reader | `src/editors/epub/` | jsoup-backed chapter text editing |
+| Text and Markdown editor | `src/editors/text/` | Raw source editor for `.md`, `.txt`, `.rst`, `.org`; Markdown toolbar and syntax colouring |
+| Markdown preview | `src/editors/markdown/` | commonmark-java renderer and the offline WebView preview |
 | PDF bridge | `src/pdf-bridge/` | Native PDF bridge (JNI/NDK) |
 | Shared | `src/shared/` | Compose theme, common components, file utilities |
 
@@ -29,6 +32,8 @@ FileBrowser (home)
   -> WordEditor(filePath)
   -> PdfEditor(filePath)
   -> PptEditor(filePath)
+  -> EpubEditor(filePath)
+  -> TextEditor(filePath) for Markdown and plain text
 ```
 
 External "Open with" intents bypass FileBrowser and land directly on the correct editor.
@@ -44,6 +49,21 @@ External "Open with" intents bypass FileBrowser and land directly on the correct
 
 PDF rendering is delegated to a native engine through a JNI/NDK bridge declared in `src/pdf-bridge/`. The Kotlin side exposes a small handle-based surface (open, page count, render, close); the native library is loaded at runtime.
 
+## Markdown preview
+
+The editor always works on the raw Markdown. Preview renders it in two steps:
+
+1. `MarkdownRenderer` parses the text with commonmark-java (CommonMark plus the GitHub extensions: tables, task lists, strikethrough, autolinks, footnotes, alerts, heading anchors, YAML front matter) and adds `$...$` / `$$...$$` maths, `math` and `mermaid` fences, and `:shortcode:` emoji. Images next to the file are inlined as `data:` URIs.
+2. `MarkdownPage` wraps the body in a page whose scripts and styles come from `assets/preview/` (KaTeX, Mermaid, highlight.js, `preview.js`, `preview.css`), loaded in a WebView with no file or content access.
+
+The page's content security policy runs only the bundled scripts: script tags, event handlers and `javascript:` links written in a document are refused, and images other than `data:` URIs are not loaded, so the preview never reaches the network. Web, mail and phone links open in the app the system picks.
+
+Text files are saved in the encoding, byte order mark and line endings they were opened with, so an unedited file is written back byte for byte.
+
+## Open source notices
+
+Settings > Notices shows the licence of everything in the app. A build task (`generate<Variant>Notices` in `build.gradle.kts`) writes them into the assets: for each runtime library, the licence and notice files from its jar and the licence its POM names, with `licenses/libraries/` and `licenses/common/` filling in where a jar has none; and for bundled fonts and preview assets, the entries in `licenses/index.tsv`.
+
 ## Data flow
 
 1. User taps a file in the browser, or shares a file to Kern via "Open with".
@@ -58,5 +78,12 @@ PDF rendering is delegated to a native engine through a JNI/NDK bridge declared 
 |---------|---------|---------|
 | Apache POI | xlsx, docx, pptx | Apache 2.0 |
 | OpenCSV | CSV parsing | Apache 2.0 |
+| jsoup | EPUB XHTML, Markdown image inlining | MIT |
+| commonmark-java | Markdown parsing and HTML rendering | BSD-2-Clause |
+| KaTeX (bundled asset) | Maths in the Markdown preview | MIT |
+| Mermaid (bundled asset, built by `scripts/mermaid/build.mjs`) | Diagrams in the Markdown preview | MIT |
+| elkjs (inside the Mermaid bundle) | ELK diagram layout | GPL-3.0-or-later (offered with EPL-2.0) |
+| highlight.js (bundled asset) | Code colouring in the Markdown preview | BSD-3-Clause |
+| gemoji (bundled data) | Emoji shortcode list | MIT |
 | Jetpack Compose | UI | Apache 2.0 |
 | Kotlin Coroutines | Async file ops | Apache 2.0 |

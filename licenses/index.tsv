@@ -1,0 +1,14 @@
+# Notices for software bundled as files rather than resolved by Gradle. One line per
+# entry, tab separated: file (relative to licenses/), title, subtitle, licence, URL.
+# Library dependencies are added at build time from their jars and POMs.
+fonts/Outfit-OFL.txt	Outfit	Typeface (app and Markdown preview)	OFL-1.1	https://github.com/Outfitio/Outfit-Fonts
+fonts/IBMPlexMono-OFL.txt	IBM Plex Mono	Typeface (app, editors and Markdown preview)	OFL-1.1	https://github.com/IBM/plex
+fonts/Quicksand-OFL.txt	Quicksand	Typeface (brand wordmark)	OFL-1.1	https://github.com/andrew-paglinawan/QuicksandFamily
+fonts/Sora-OFL.txt	Sora	Typeface	OFL-1.1	https://github.com/sora-xor/sora-font
+preview/KaTeX-MIT.txt	KaTeX	Maths in the Markdown preview (0.19.0, with its fonts)	MIT	https://katex.org
+preview/Mermaid-MIT.txt	Mermaid	Diagrams in the Markdown preview (12.2.0)	MIT	https://mermaid.js.org
+preview/Mermaid-bundle-NOTICES.txt	Mermaid bundle	Every package inside the Mermaid build, each with its licence	Various (see text)	https://github.com/mermaid-js/mermaid
+common/GPL-3.0-or-later.txt	elkjs	ELK diagram layout inside the Mermaid build (0.12.1), used under GPL-3.0-or-later; also offered under EPL-2.0	GPL-3.0-or-later	https://github.com/kieler/elkjs
+preview/highlight.js-BSD-3-Clause.txt	highlight.js	Code colouring in the Markdown preview (11.12.0)	BSD-3-Clause	https://highlightjs.org
+preview/gemoji-MIT.txt	gemoji	Emoji shortcode list (8.1.0)	MIT	https://github.com/wooorm/gemoji
+common/GPL-3.0-or-later.txt	Qyra PDF bridge	Native PDF engine (kern-bridge from the Qyra fork)	GPL-3.0	https://github.com/verycareful/Qyra

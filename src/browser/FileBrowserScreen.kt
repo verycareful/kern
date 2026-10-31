@@ -158,8 +158,7 @@ fun FileBrowserScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val mime = context.contentResolver.getType(uri)
-        val ext = DocumentIo.displayName(context, uri).substringAfterLast('.', "")
-        val format = DocumentFormat.fromMimeType(mime) ?: DocumentFormat.fromExtension(ext)
+        val format = DocumentFormat.resolve(mime, DocumentIo.displayName(context, uri))
         if (format == null) scope.launch { snackbar.showSnackbar("Unsupported file type") }
         else {
             DocumentIo.tryPersist(context, uri)

@@ -1,0 +1,16 @@
+{
+  "name": "kern-mermaid-bundle",
+  "private": true,
+  "description": "Builds assets/preview/mermaid/mermaid.min.js: Mermaid with the elkjs release that offers GPL-3.0-or-later alongside EPL-2.0.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {
+    "mermaid": "12.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "elkjs": "0.12.1"
+  }
+}

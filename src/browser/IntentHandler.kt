@@ -21,9 +21,7 @@ object IntentHandler {
         if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_EDIT) return null
 
         val uri: Uri = intent.data ?: return null
-        val format = DocumentFormat.fromMimeType(intent.type)
-            ?: DocumentFormat.fromExtension(uri.lastPathSegment?.substringAfterLast('.') ?: "")
-            ?: return null
+        val format = DocumentFormat.resolve(intent.type, uri.lastPathSegment) ?: return null
 
         val encoded = Uri.encode(uri.toString())
         return DeepLink(format, "${Destinations.routeFor(format)}/$encoded")

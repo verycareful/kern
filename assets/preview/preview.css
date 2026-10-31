@@ -1,0 +1,96 @@
+/* Markdown preview styles. Colours come from the app theme through the custom
+   properties set on :root by the page; everything else follows GitHub's layout
+   so documents written for GitHub read the same here. */
+
+/* Kern's own faces: Outfit for text, IBM Plex Mono for code, as in the app. */
+@font-face { font-family: "Outfit"; font-weight: 400; src: url(fonts/outfit_regular.ttf) format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 500; src: url(fonts/outfit_medium.ttf) format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 600; src: url(fonts/outfit_semibold.ttf) format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 700; src: url(fonts/outfit_bold.ttf) format("truetype"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url(fonts/ibm_plex_mono_regular.ttf) format("truetype"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url(fonts/ibm_plex_mono_semibold.ttf) format("truetype"); }
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 "Outfit", sans-serif;
+  word-wrap: break-word;
+}
+.markdown-body { padding: 16px 18px 48px; max-width: 980px; margin: 0 auto; }
+.markdown-body > *:first-child { margin-top: 0 !important; }
+
+h1, h2, h3, h4, h5, h6 { margin: 24px 0 16px; font-weight: 600; line-height: 1.25; }
+h1 { font-size: 2em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+h2 { font-size: 1.5em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+h5 { font-size: .875em; }
+h6 { font-size: .85em; color: var(--muted); }
+
+p, blockquote, ul, ol, dl, table, pre, details, .markdown-alert { margin: 0 0 16px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover, a:focus { text-decoration: underline; }
+strong { font-weight: 600; }
+hr { height: 4px; margin: 24px 0; padding: 0; border: 0; background: var(--border); border-radius: 2px; }
+img { max-width: 100%; box-sizing: border-box; }
+mark { background: #fff3a3; color: #1f2328; padding: 0 .2em; border-radius: 3px; }
+sup, sub { line-height: 0; }
+
+ul, ol { padding-left: 2em; }
+li + li { margin-top: .25em; }
+li > p { margin-top: 16px; }
+ul ul, ul ol, ol ol, ol ul { margin: 0; }
+li > input[type="checkbox"] { margin: 0 .35em .2em -1.4em; vertical-align: middle; }
+ul:has(> li > input[type="checkbox"]) { list-style: none; }
+
+blockquote { margin-left: 0; padding: 0 1em; color: var(--muted); border-left: .25em solid var(--border); }
+blockquote > :last-child { margin-bottom: 0; }
+
+code, kbd, pre, samp, tt {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 85%;
+}
+code { padding: .2em .4em; background: var(--surface); border-radius: 6px; }
+pre { padding: 16px; overflow: auto; line-height: 1.45; background: var(--surface); border-radius: 6px; }
+pre code { padding: 0; background: transparent; font-size: 100%; white-space: pre; }
+.markdown-body pre code.hljs { display: inline; padding: 0; overflow: visible; background: transparent; }
+kbd {
+  display: inline-block; padding: 3px 5px; font-size: 80%; line-height: 1; vertical-align: middle;
+  background: var(--surface); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px;
+}
+
+table { border-collapse: collapse; border-spacing: 0; display: block; width: max-content; max-width: 100%; overflow: auto; }
+th, td { padding: 6px 13px; border: 1px solid var(--border); }
+th { font-weight: 600; }
+tr:nth-child(2n) { background: var(--surface); }
+table.front-matter { font-size: 90%; }
+
+details { padding: 0; }
+summary { cursor: pointer; font-weight: 600; }
+details[open] > summary { margin-bottom: 8px; }
+
+.math-display, div.math { display: block; overflow-x: auto; overflow-y: hidden; margin: 0 0 16px; text-align: center; }
+.math-error { color: #cf222e; font-family: monospace; white-space: pre-wrap; }
+
+pre.mermaid { background: transparent; text-align: center; padding: 8px 0; }
+pre.mermaid svg { max-width: 100%; height: auto; }
+
+.markdown-alert { padding: 8px 16px; border-left: .25em solid var(--alert, var(--border)); }
+.markdown-alert > :last-child { margin-bottom: 0; }
+.markdown-alert-title { display: flex; align-items: center; font-weight: 600; color: var(--alert); margin-bottom: 4px; }
+.markdown-alert-note { --alert: #4493f8; }
+.markdown-alert-tip { --alert: #3fb950; }
+.markdown-alert-important { --alert: #ab7df8; }
+.markdown-alert-warning { --alert: #d29922; }
+.markdown-alert-caution { --alert: #f85149; }
+
+.footnotes { font-size: 85%; color: var(--muted); border-top: 1px solid var(--border); margin-top: 32px; padding-top: 8px; }
+.footnotes ol { padding-left: 1.5em; }
+.footnotes li:target, :target { scroll-margin-top: 12px; }
+
+.image-missing {
+  display: inline-block; padding: 6px 10px; margin: 2px 0; font-size: 85%; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 6px; background: var(--surface);
+}

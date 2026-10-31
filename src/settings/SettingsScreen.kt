@@ -57,7 +57,7 @@ internal val AccentSwatch = 30.dp
 internal val AccentCheckSize = 16.dp
 internal val AccentRingWidth = 2.dp
 internal val TrailingIconSize = 18.dp
-internal const val APP_VERSION = "0.1.11.2"
+internal const val APP_VERSION = "0.1.12.0"
 internal const val SCAN_DOCUMENTS_PATH = "/Documents"
 internal const val SCAN_DOWNLOADS_PATH = "/Downloads"
 internal const val PERMISSION_GRANTED = "GRANTED"
@@ -78,6 +78,7 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val colors = KernTheme.colors
     val settings = LocalKernSettings.current
     var showLicense by remember { mutableStateOf(false) }
+    var showNotices by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().background(colors.bg).statusBarsPadding().navigationBarsPadding()) {
         SettingsHeader(onBack = onBack)
@@ -99,12 +100,13 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 onScanDownloads = settings::updateScanDownloads,
             )
             PrivacyGroup()
-            AboutGroup(onShowLicense = { showLicense = true })
+            AboutGroup(onShowLicense = { showLicense = true }, onShowNotices = { showNotices = true })
             Spacer(Modifier.height(BottomSpacer))
         }
     }
 
     if (showLicense) LicenseDialog(onDismiss = { showLicense = false })
+    if (showNotices) NoticesDialog(onDismiss = { showNotices = false })
 }
 
 @Composable
