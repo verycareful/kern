@@ -2,32 +2,19 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
-## [0.1.12.1] - 2026-10-31 22:05 IST
-
-### Changed
-- **Edit and Preview Switch**: floats over the top corner of the document instead of taking a row of its own, and fades out when the document has been still for a moment; scrolling or touching the document brings it back
-- **Preview Fonts**: the Markdown preview sets text in Outfit and code in IBM Plex Mono, the faces the rest of Kern uses, bundled with the preview so they work offline. The editor keeps IBM Plex Mono
-- `README.md`: KaTeX, Mermaid and highlight.js badges for the libraries bundled with the preview
-
-### Tests
-- `previewStylesheet_usesKernFonts_andBundlesThem`: the preview stylesheet names Outfit and IBM Plex Mono and every font file it loads is bundled
-- `emojiTable_skipsMalformedLines`, `mimeFor_knowsImageTypesOnly`: emoji table parsing and image type detection
-- Emoji table and image resolver tests now live in `MarkdownAssetsTest.kt`, and the preview routing tests in `TextEditorViewModelTest.kt`, mirroring the files they cover
-
-### Results
-- 245 tests across 19 suites, all passed (23s, local Gradle `testDebugUnitTest`); lint clean
-
-## [0.1.12.0] - 2026-10-31 21:50 IST
+## [0.1.12.0] - 2026-10-31 22:16 IST
 
 ### Added
-- **Markdown Editor** (`src/editors/text/`): opens `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` and `.mdx` files as raw Markdown with Edit and Preview modes; Markdown files open in Preview. The source is coloured as you type (headings, emphasis, code, links, lists, quotes, maths, HTML) and a toolbar inserts or toggles bold, italic, strikethrough, inline code, headings (cycling `#` to `######`), bulleted, numbered and task lists, quotes, links, images, code blocks, tables and rules. Undo and redo cover typing and toolbar edits
-- **Markdown Preview** (`src/editors/markdown/`): renders CommonMark with the GitHub additions: tables with column alignment, task lists, strikethrough, autolinks, footnotes (including inline `^[...]`), alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), heading anchors with in-page links, YAML front matter shown as a table, raw HTML (`<details>`, `<kbd>`, `<sub>`, `<sup>`, `<mark>`, `<img width>` and the rest), `$...$` and `$$...$$` maths and `math` fences typeset with KaTeX, `mermaid` fences drawn as diagrams, fenced code coloured by language with highlight.js, and `:shortcode:` emoji. Images beside the file (including `../` paths) are shown; web images show a labelled placeholder. Light and dark themes follow the app. Web, mail and phone links open in the app the system picks
+- **Markdown Editor** (`src/editors/text/`): opens `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` and `.mdx` files as raw Markdown with Edit and Preview modes; Markdown files open in Preview. A small Edit and Preview switch floats over the top corner of the document and fades out once the document has been still for a moment; scrolling or touching the document brings it back. The source is set in IBM Plex Mono and coloured as you type (headings, emphasis, code, links, lists, quotes, maths, HTML), and a toolbar inserts or toggles bold, italic, strikethrough, inline code, headings (cycling `#` to `######`), bulleted, numbered and task lists, quotes, links, images, code blocks, tables and rules. Undo and redo cover typing and toolbar edits
+- **Markdown Preview** (`src/editors/markdown/`): renders CommonMark with the GitHub additions: tables with column alignment, task lists, strikethrough, autolinks, footnotes (including inline `^[...]`), alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), heading anchors with in-page links, YAML front matter shown as a table, raw HTML (`<details>`, `<kbd>`, `<sub>`, `<sup>`, `<mark>`, `<img width>` and the rest), `$...$` and `$$...$$` maths and `math` fences typeset with KaTeX, `mermaid` fences drawn as diagrams, fenced code coloured by language with highlight.js, and `:shortcode:` emoji. Images beside the file (including `../` paths) are shown; web images show a labelled placeholder. Text is set in Outfit and code in IBM Plex Mono, Kern's own faces, bundled with the preview; light and dark themes follow the app. Web, mail and phone links open in the app the system picks
 - **Plain Text Editor**: `.txt`, `.text`, `.rst` and `.org` files open in the same editor with undo and redo; a file sent as `text/plain` whose name ends in a Markdown extension gets the preview
 - **Faithful Saving** (`TextDocument.kt`): files are saved in the encoding they were opened in (UTF-8, UTF-8 or UTF-16 with a byte order mark, or ISO-8859-1 for bytes that are not valid UTF-8), keeping the byte order mark and the line endings (LF, CRLF or CR), so an unedited file is written back byte for byte; the unsaved mark clears when edits are undone back to the saved text
 - **Open With**: Kern is offered for `text/markdown`, `text/x-markdown`, `text/plain`, `text/x-rst` and `text/org` files, and the file browser lists and filters Markdown and text files
 - `sample-files/kern-sample.md`: a sample exercising every construct the preview renders
-- Bundled preview assets under `assets/preview/`: KaTeX 0.19.0 (MIT) with its fonts, Mermaid 12.1.0 (MIT), highlight.js 11.12.0 (BSD-3-Clause) and the gemoji 8.1.0 shortcode list (MIT); licence texts in `licenses/preview/`
+- Bundled preview assets under `assets/preview/`: Outfit and IBM Plex Mono (OFL, as in `licenses/fonts/`), KaTeX 0.19.0 (MIT) with its fonts, Mermaid 12.1.0 (MIT), highlight.js 11.12.0 (BSD-3-Clause) and the gemoji 8.1.0 shortcode list (MIT); licence texts in `licenses/preview/`
 - commonmark-java 0.30.1 (BSD-2-Clause) with its tables, strikethrough, alerts, task list, autolink, footnotes, heading anchor and YAML front matter extensions
+- `README.md`: Markdown and plain text formats; commonmark-java, KaTeX, Mermaid and highlight.js badges; licences of the bundled preview assets
+- `docs/architecture.md`: the text and Markdown editor, the preview pipeline and its security model
 
 ### Security
 - The preview runs in a WebView with no file or content access under a content security policy that admits only the bundled scripts: `<script>` blocks, `on*=` handlers and `javascript:` links written in a document do not run, and only images inlined from the device are loaded, so previewing a document makes no network requests. Kern still declares no network permission
@@ -36,13 +23,14 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 - **Text Document** (`TextDocumentTest.kt`): byte-for-byte round trips for UTF-8 with and without a byte order mark, UTF-16LE, CRLF, CR, invalid UTF-8 through ISO-8859-1, empty files and files without a final newline; line endings restored after an edit
 - **Markdown Toolbar** (`MarkdownFormattingTest.kt`): wrapping, placeholders and unwrapping for inline marks, italic inside bold, heading level cycling, caret kept in place, list, task and quote marking and unmarking across lines, numbering, links and images with and without a selection, code blocks, tables and rules separated by blank lines
 - **Source Colouring** (`MarkdownHighlighterTest.kt`): headings, inline marks, maths and HTML found; nothing coloured inside inline code or fenced code; unclosed fences; list markers, quotes and rules; very large files left plain
-- **Markdown Rendering** (`MarkdownRendererTest.kt`): tables, task lists, strikethrough, autolinks, alerts, heading anchors, footnotes, front matter, inline and display maths, prices and escaped dollars left as text, code spans, mermaid and language fences, emoji shortcodes and URLs with ports, raw HTML, which images go through the resolver, the bundled emoji table
-- **Preview Page** (`MarkdownPageTest.kt`): the content security policy, scripts included only when needed, dark theme, every referenced asset bundled; local image inlining through parent folders and encoded names, and refusal of missing, non-image and oversized files
-- **Text Editor** (`TextEditorViewModelTest.kt`, `TextEditorRoutingTest.kt`, Robolectric): opening in Preview, the preview for plain text named as Markdown, toolbar edits marking the file changed and saving with its own line endings, undoing back to clean, no undo history on open, the preview following edits, a missing file reported; which files get the preview
+- **Markdown Rendering** (`MarkdownRendererTest.kt`): tables, task lists, strikethrough, autolinks, alerts, heading anchors, footnotes, front matter, inline and display maths, prices and escaped dollars left as text, code spans, mermaid and language fences, emoji shortcodes and URLs with ports, raw HTML, which images go through the resolver
+- **Preview Page** (`MarkdownPageTest.kt`): the content security policy, scripts included only when needed, dark theme, every referenced asset bundled, the stylesheet using Kern's fonts and bundling every font file it loads
+- **Preview Assets** (`MarkdownAssetsTest.kt`): the bundled emoji table and malformed lines; local image inlining through parent folders and encoded names, refusal of missing, non-image and oversized files, image type detection
+- **Text Editor** (`TextEditorViewModelTest.kt`, Robolectric): opening in Preview, the preview for plain text named as Markdown, toolbar edits marking the file changed and saving with its own line endings, undoing back to clean, no undo history on open, the preview following edits, a missing file reported; which files get the preview
 - **Formats** (`DocumentFormatTest.kt`, `ThemeTokensTest.kt`): Markdown and text extensions and MIME types, a file name deciding over `text/plain`, a specific MIME type deciding over the name, monograms
 
 ### Results
-- 242 tests across 19 suites, all passed (24s, local Gradle `testDebugUnitTest`); lint clean
+- 245 tests across 19 suites, all passed (26s, local Gradle `testDebugUnitTest`); lint clean
 
 ## [0.1.11.2] - 2026-10-31 17:14 IST
 
