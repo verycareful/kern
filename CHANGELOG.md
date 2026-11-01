@@ -2,6 +2,25 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.13.0] - 2026-11-01 12:48 IST
+
+### Added
+- **Fast Scroll Bar** (`src/shared/ui/FastScrollbar.kt`): a vertical swipe along the right edge of a document shows a scroll bar; dragging moves through the document from the current position, so showing the bar never jumps it. The bar fades out 1.5 s after the finger lifts and never while a finger is on it. Taps, long presses, sideways swipes and pinch zoom near the edge still reach the document. In PDF, Word, the text and Markdown editor, the Markdown preview (whose own scroll indicator is hidden while the bar shows), EPUB (within the open chapter) and CSV and Excel (rows; dragging stops a fling in progress). PowerPoint shows one slide at a time and has no bar
+- **Go to Page** (`src/shared/ui/GoToPageDialog.kt`): tapping the page counter in PDF, the slide counter in PowerPoint or the chapter counter in EPUB opens a dialog that takes a number and jumps there. A blank field, a number outside the document or anything that is not a whole number is refused under the field, never clamped
+- `docs/architecture.md`: moving through a document (the fast scroll bar, its scroller adapters and go to page)
+
+### Changed
+- **EPUB Chapters**: every chapter opens at its beginning, whether reached by the arrows, the contents or go to chapter; the previous chapter's scroll offset no longer carries over
+- **Markdown Edit and Preview Switch**: its show-then-fade behaviour is shared with the fast scroll bar (`src/shared/ui/AutoHide.kt`); it behaves as before
+- **Release Notes**: a GitHub Release now shows the debug build note followed by that version's section of `CHANGELOG.md`, in place of generated notes. A tag with no section in `CHANGELOG.md` fails the release before anything is published
+
+### Tests
+- **Fast Scroll Geometry** (`FastScrollMathTest.kt`): position from offset and back, clamping, content that fits on screen, a scroller that does not report its viewport, list position estimated from the items on screen and its inverse, a single page taller than the screen, empty lists, thumb length with its floor, thumb offset, dragging relative to the start
+- **Go to Page Input** (`PageNumberTest.kt`): numbers in range, spaces and leading zeros, zero, past the end and overflowing numbers, negatives, decimals, words and two numbers, a blank field named by its unit, nothing to go to, a single page
+
+### Results
+- 274 tests across 22 suites, all passed (21s, local Gradle `testDebugUnitTest`); lint clean
+
 ## [0.1.12.0] - 2026-10-31 22:46 IST
 
 ### Added
