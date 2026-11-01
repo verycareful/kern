@@ -38,10 +38,13 @@ import dev.kern.shared.theme.KernType
 import dev.kern.shared.theme.OutfitFamily
 import dev.kern.shared.theme.SoraFamily
 import dev.kern.shared.ui.EditorChrome
+import dev.kern.shared.ui.FastScrollBox
+import dev.kern.shared.ui.GoToPageDialog
 import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.KernIcons
 import dev.kern.shared.ui.pinchZoom
+import dev.kern.shared.ui.rememberFastScrollTarget
 import dev.kern.shared.ui.rememberZoomState
 import kotlin.math.roundToInt
 
@@ -75,15 +78,20 @@ private fun ChapterReader(vm: EpubEditorViewModel, hue: Color, modifier: Modifie
     val colors = KernTheme.colors
     val zoom = rememberZoomState()
     var tocOpen by remember { mutableStateOf(false) }
+    var goToOpen by remember { mutableStateOf(false) }
     val chapterLabel = vm.chapterTitles().getOrNull(vm.currentChapter)?.takeIf { it.isNotBlank() }
         ?: "Chapter ${vm.currentChapter + 1}"
 
+    val scroll = rememberScrollState()
+    // Every chapter opens at its beginning, however it was reached.
+    LaunchedEffect(vm.currentChapter) { scroll.scrollTo(0) }
+
     Column(modifier.background(colors.sunken)) {
-        Box(Modifier.weight(1f).pinchZoom(zoom)) {
+        FastScrollBox(rememberFastScrollTarget(scroll), hue, Modifier.weight(1f).pinchZoom(zoom)) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scroll)
                     .padding(horizontal = 18.dp, vertical = 16.dp),
             ) {
                 Column(
@@ -135,6 +143,7 @@ private fun ChapterReader(vm: EpubEditorViewModel, hue: Color, modifier: Modifie
             onPrev = { vm.previousChapter() },
             onNext = { vm.nextChapter() },
             onToc = { tocOpen = true },
+            onGoTo = { goToOpen = true },
         )
     }
 
@@ -161,6 +170,19 @@ private fun ChapterReader(vm: EpubEditorViewModel, hue: Color, modifier: Modifie
             Box(Modifier.padding(bottom = 12.dp))
         }
     }
+
+    if (goToOpen) {
+        GoToPageDialog(
+            unit = "chapter",
+            current = vm.currentChapter,
+            total = vm.chapterCount,
+            onDismiss = { goToOpen = false },
+            onGo = { index ->
+                vm.goToChapter(index)
+                goToOpen = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -171,6 +193,7 @@ private fun ChapterFooter(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToc: () -> Unit,
+    onGoTo: () -> Unit,
 ) {
     val colors = KernTheme.colors
     Row(
@@ -187,7 +210,10 @@ private fun ChapterFooter(
             text = "${if (total == 0) 0 else current + 1} / $total",
             style = KernType.meta.copy(fontSize = 13.sp),
             color = colors.textMid,
-            modifier = Modifier.padding(horizontal = 10.dp),
+            modifier = Modifier
+                .clip(RoundedCornerShape(KernRadius.innerSmall))
+                .clickable(enabled = total > 0, onClickLabel = "Go to chapter", onClick = onGoTo)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
         )
         KernIconButton(KernIcons.Chevron, "Next chapter", onNext, enabled = current < total - 1)
     }

@@ -60,6 +60,14 @@ The page's content security policy runs only the bundled scripts: script tags, e
 
 Text files are saved in the encoding, byte order mark and line endings they were opened with, so an unedited file is written back byte for byte.
 
+## Moving through a document
+
+Every viewer that scrolls vertically wraps its scroller in `FastScrollBox` (`src/shared/ui/FastScrollbar.kt`). A vertical swipe that starts in a narrow strip along the right edge shows a scroll bar whose thumb follows the finger from where it already is; the bar fades out 1.5 s after the finger lifts. The gesture is watched before the document sees it and is taken only once it is clearly a vertical drag, so taps, long presses, sideways swipes and pinch zoom near the edge still reach the document.
+
+Each scroller is adapted to `FastScrollTarget`, which sees it as a fraction of its scrollable range: `ScrollState` (text editor, EPUB chapter), `LazyListState` (PDF pages, Word blocks; the list's length is estimated from the items on screen), the preview WebView (whose own indicator is hidden while the bar shows), and the spreadsheet grid's row offset. The geometry is in `FastScrollMath`, free of Compose.
+
+Files with pages take a number in `GoToPageDialog` (`src/shared/ui/GoToPageDialog.kt`): tapping the page counter in PDF, the slide counter in PowerPoint or the chapter counter in EPUB opens it. A number outside the document is refused, never clamped.
+
 ## Open source notices
 
 Settings > Notices shows the licence of everything in the app. A build task (`generate<Variant>Notices` in `build.gradle.kts`) writes them into the assets: for each runtime library, the licence and notice files from its jar and the licence its POM names, with `licenses/libraries/` and `licenses/common/` filling in where a jar has none; and for bundled fonts and preview assets, the entries in `licenses/index.tsv`.
