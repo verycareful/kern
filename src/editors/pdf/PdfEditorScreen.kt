@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,7 @@ import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 import dev.kern.shared.theme.PlexMonoFamily
 import dev.kern.shared.ui.FastScrollBox
+import dev.kern.shared.ui.GoToPageDialog
 import dev.kern.shared.ui.rememberFastScrollTarget
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
@@ -141,6 +143,7 @@ private fun PdfPager(
     val zoom = rememberZoomState()
     val listState = rememberLazyListState()
     var containerWidthPx by remember { mutableIntStateOf(0) }
+    var goToOpen by remember { mutableStateOf(false) }
 
     Box(
         modifier
@@ -163,13 +166,14 @@ private fun PdfPager(
                 }
             }
 
-            // Page indicator pill: which page sits at the top of the viewport.
+            // Page indicator pill: which page sits at the top of the viewport. Tap to go to a page.
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(12.dp)
                     .clip(RoundedCornerShape(KernRadius.field))
                     .background(colors.surface)
+                    .clickable(onClickLabel = "Go to page") { goToOpen = true }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(
@@ -194,6 +198,19 @@ private fun PdfPager(
         }
 
         PdfToolsLayer(vm, toolsSheetOpen, onToolsSheetOpenChange)
+    }
+
+    if (goToOpen) {
+        GoToPageDialog(
+            unit = "page",
+            current = listState.firstVisibleItemIndex,
+            total = vm.pageCount,
+            onDismiss = { goToOpen = false },
+            onGo = { index ->
+                listState.requestScrollToItem(index)
+                goToOpen = false
+            },
+        )
     }
 }
 

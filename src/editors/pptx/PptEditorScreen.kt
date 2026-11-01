@@ -62,6 +62,7 @@ import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
+import dev.kern.shared.ui.GoToPageDialog
 import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.KernIcons
@@ -820,6 +821,7 @@ private fun Modifier.shapeDrag(
 @Composable
 private fun PageIndicator(vm: PptEditorViewModel, vertical: Boolean = false) {
     val colors = KernTheme.colors
+    var goToOpen by remember { mutableStateOf(false) }
     val previous = @Composable {
         KernIconButton(
             KernIcons.ChevronLeft,
@@ -834,7 +836,10 @@ private fun PageIndicator(vm: PptEditorViewModel, vertical: Boolean = false) {
             style = KernType.meta.copy(fontSize = 13.sp),
             color = colors.textMid,
             textAlign = TextAlign.Center,
-            modifier = if (vertical) Modifier else Modifier.width(PageIndicatorMinWidth),
+            modifier = (if (vertical) Modifier else Modifier.width(PageIndicatorMinWidth))
+                .clip(RoundedCornerShape(KernRadius.innerSmall))
+                .clickable(enabled = vm.slideCount > 0, onClickLabel = "Go to slide") { goToOpen = true }
+                .padding(vertical = CounterTapPadding),
         )
     }
     val next = @Composable {
@@ -858,7 +863,22 @@ private fun PageIndicator(vm: PptEditorViewModel, vertical: Boolean = false) {
             previous(); counter(); next()
         }
     }
+    if (goToOpen) {
+        GoToPageDialog(
+            unit = "slide",
+            current = vm.currentSlide,
+            total = vm.slideCount,
+            onDismiss = { goToOpen = false },
+            onGo = { index ->
+                vm.goToSlide(index)
+                goToOpen = false
+            },
+        )
+    }
 }
+
+/** Vertical padding that gives the slide counter a usable tap target. */
+private val CounterTapPadding = 6.dp
 
 /** Horizontally scrollable rail of numbered slide tiles; tapping picks a slide, long-press opens actions. */
 @Composable
