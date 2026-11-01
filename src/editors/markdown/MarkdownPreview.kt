@@ -11,15 +11,21 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.kern.shared.theme.KernColorScheme
+import dev.kern.shared.ui.FastScrollBox
+import dev.kern.shared.ui.FastScrollMath
+import dev.kern.shared.ui.FastScrollTarget
 import java.io.ByteArrayInputStream
 
 /**
@@ -30,12 +36,14 @@ import java.io.ByteArrayInputStream
  * it and the bundled assets. Requests for anything outside the asset folder get
  * an empty answer here, before reaching the network. Tapping a web, mail or phone
  * link opens it in the app the system picks for it; links inside the page are
- * handled by the page itself. [onScroll] is called as the page scrolls.
+ * handled by the page itself. [onScroll] is called as the page scrolls, and the
+ * right edge carries a fast scroll bar in [hue].
  */
 @Composable
 fun MarkdownPreview(
     rendered: MarkdownRenderer.Rendered,
     colors: KernColorScheme,
+    hue: Color,
     modifier: Modifier = Modifier,
     onScroll: () -> Unit = {},
 ) {
@@ -43,32 +51,77 @@ fun MarkdownPreview(
     val theme = remember(colors) { colors.toPreviewTheme() }
     val page = remember(rendered, theme) { MarkdownPage.build(rendered, theme) }
     val background = colors.bg.toArgb()
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            createWebView(context).apply { setOnScrollChangeListener { _, _, _, _, _ -> currentOnScroll() } }
-        },
-        update = { view ->
-            view.setBackgroundColor(background)
-            if (view.tag != page) {
-                view.tag = page
-                view.loadDataWithBaseURL(MarkdownPage.BASE_URL, page, "text/html", "utf-8", null)
-            }
-        },
-        onRelease = { it.destroy() },
-    )
+    val scrollTarget = remember { WebViewScrollTarget() }
+    FastScrollBox(scrollTarget, hue, modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                PreviewWebView(context).apply {
+                    scrollTarget.view = this
+                    setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                        scrollTarget.scrollY = scrollY
+                        currentOnScroll()
+                    }
+                }
+            },
+            update = { view ->
+                view.setBackgroundColor(background)
+                if (view.tag != page) {
+                    view.tag = page
+                    view.loadDataWithBaseURL(MarkdownPage.BASE_URL, page, "text/html", "utf-8", null)
+                }
+            },
+            onRelease = {
+                scrollTarget.view = null
+                it.destroy()
+            },
+        )
+    }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
-private fun createWebView(context: Context): WebView = WebView(context).apply {
-    setBackgroundColor(AndroidColor.TRANSPARENT)
-    settings.javaScriptEnabled = true
-    settings.allowFileAccess = false
-    settings.allowContentAccess = false
-    settings.domStorageEnabled = false
-    settings.builtInZoomControls = true
-    settings.displayZoomControls = false
-    webViewClient = PreviewClient(context)
+/** A WebView that reports its vertical scroll range, which [WebView] keeps protected. */
+@SuppressLint("SetJavaScriptEnabled", "ViewConstructor")
+private class PreviewWebView(context: Context) : WebView(context) {
+    init {
+        setBackgroundColor(AndroidColor.TRANSPARENT)
+        settings.javaScriptEnabled = true
+        settings.allowFileAccess = false
+        settings.allowContentAccess = false
+        settings.domStorageEnabled = false
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
+        webViewClient = PreviewClient(context)
+    }
+
+    /** Pixels the page can scroll: its full height less the part on screen. */
+    val maxScrollY: Int get() = (computeVerticalScrollRange() - computeVerticalScrollExtent()).coerceAtLeast(0)
+
+    val viewportHeight: Int get() = computeVerticalScrollExtent()
+}
+
+/**
+ * The preview page as a [FastScrollTarget]. The page's height is read from the
+ * WebView when needed, since it grows as diagrams and maths finish drawing;
+ * [scrollY] is mirrored into state so the thumb follows the page.
+ */
+private class WebViewScrollTarget : FastScrollTarget {
+    var view: PreviewWebView? = null
+    var scrollY by mutableIntStateOf(0)
+
+    private val metrics: FastScrollMath.PixelMetrics
+        get() {
+            val v = view ?: return FastScrollMath.PixelMetrics(0, 0, 0)
+            return FastScrollMath.PixelMetrics(scrollY, v.maxScrollY, v.viewportHeight)
+        }
+
+    override val fraction get() = metrics.fraction
+    override val visibleFraction get() = metrics.visibleFraction
+    override val canScroll get() = metrics.canScroll
+
+    override fun scrollToFraction(fraction: Float) {
+        val v = view ?: return
+        v.scrollTo(v.scrollX, metrics.offsetFor(fraction))
+    }
 }
 
 private class PreviewClient(private val context: Context) : WebViewClient() {

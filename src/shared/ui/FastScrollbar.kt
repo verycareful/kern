@@ -74,7 +74,7 @@ object FastScrollMath {
 
     /** A pixel-addressed scroller: [offsetPx] of [maxOffsetPx], showing [viewportPx]. */
     data class PixelMetrics(val offsetPx: Int, val maxOffsetPx: Int, val viewportPx: Int) {
-        val canScroll: Boolean get() = maxOffsetPx > 0 && viewportPx > 0
+        val canScroll: Boolean get() = maxOffsetPx > 0
 
         val fraction: Float
             get() = if (maxOffsetPx <= 0) 0f else (offsetPx.toFloat() / maxOffsetPx).coerceIn(0f, 1f)

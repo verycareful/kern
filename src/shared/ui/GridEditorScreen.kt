@@ -43,6 +43,7 @@ import dev.kern.shared.theme.PlexMonoFamily
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -89,6 +90,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -393,6 +395,7 @@ private fun Grid(
 
     var hScrollPx by remember { mutableIntStateOf(0) }
     var vScrollPx by remember { mutableIntStateOf(0) }
+    var verticalFling by remember { mutableStateOf<Job?>(null) }
     var activeCol by remember { mutableStateOf<Int?>(null) }
     var activeRow by remember { mutableStateOf<Int?>(null) }
 
@@ -483,192 +486,209 @@ private fun Grid(
             val vpH = constraints.maxHeight
             val maxHScroll = (getColOffset(columns) - vpW).coerceAtLeast(0)
             val maxVScroll = (getRowOffset(numRows) - vpH).coerceAtLeast(0)
-            Row(Modifier.fillMaxSize()) {
-                // Frozen row-number gutter
-                Box(Modifier.width(gutterW).fillMaxHeight().clipToBounds()) {
-                    val fr = findFirstVisible(vScrollPx, numRows, getRowOffset)
-                    val lr = (findFirstVisible(vScrollPx + vpH, numRows, getRowOffset) + 1).coerceAtMost(numRows - 1)
-                    for (r in fr..lr) {
-                        key(r) {
-                            val rHPx = customRowHeightsPx[r] ?: defaultRowHPx
-                            val rH = if (r in customRowHeightsPx) with(density) { rHPx.toDp() } else cellH
-                            val yOff = getRowOffset(r) - vScrollPx
-                            Box(Modifier.offset { IntOffset(0, yOff) }.clickable {
-                                activeRow = r
-                                activeCol = null
-                            }) {
-                                Tile((r + 1).toString(), gutterW, rH, gutterFont, hue, r == activeRow || (activeRow == null && r == selectedRow))
-                            }
-                            if (r == activeRow) {
-                                val dividerHeightPx = with(density) { 48.dp.roundToPx() }
-                                var currentHeightPx = rHPx.toFloat()
-                                var lastClickTime by remember { mutableStateOf(0L) }
-                                Box(
-                                    Modifier
-                                        .zIndex(1f)
-                                        .offset { IntOffset(0, yOff + rHPx - dividerHeightPx / 2) }
-                                        .size(gutterW, 48.dp)
-                                        .pointerInput(r, "tap") {
-                                            awaitPointerEventScope {
-                                                while (true) {
-                                                    val down = awaitFirstDown(requireUnconsumed = false)
-                                                    val up = waitForUpOrCancellation()
-                                                    if (up != null && (up.uptimeMillis - down.uptimeMillis) < 200) {
-                                                        if (up.uptimeMillis - lastClickTime < 300) {
-                                                            onAutoResizeRow(r)
+            val currentMaxVScroll by rememberUpdatedState(maxVScroll)
+            val currentViewportH by rememberUpdatedState(vpH)
+            val verticalTarget = remember {
+                object : FastScrollTarget {
+                    private val metrics
+                        get() = FastScrollMath.PixelMetrics(vScrollPx, currentMaxVScroll, currentViewportH)
+                    override val fraction get() = metrics.fraction
+                    override val visibleFraction get() = metrics.visibleFraction
+                    override val canScroll get() = metrics.canScroll
+                    override fun scrollToFraction(fraction: Float) {
+                        verticalFling?.cancel()
+                        vScrollPx = metrics.offsetFor(fraction)
+                    }
+                }
+            }
+            FastScrollBox(verticalTarget, hue, Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxSize()) {
+                    // Frozen row-number gutter
+                    Box(Modifier.width(gutterW).fillMaxHeight().clipToBounds()) {
+                        val fr = findFirstVisible(vScrollPx, numRows, getRowOffset)
+                        val lr = (findFirstVisible(vScrollPx + vpH, numRows, getRowOffset) + 1).coerceAtMost(numRows - 1)
+                        for (r in fr..lr) {
+                            key(r) {
+                                val rHPx = customRowHeightsPx[r] ?: defaultRowHPx
+                                val rH = if (r in customRowHeightsPx) with(density) { rHPx.toDp() } else cellH
+                                val yOff = getRowOffset(r) - vScrollPx
+                                Box(Modifier.offset { IntOffset(0, yOff) }.clickable {
+                                    activeRow = r
+                                    activeCol = null
+                                }) {
+                                    Tile((r + 1).toString(), gutterW, rH, gutterFont, hue, r == activeRow || (activeRow == null && r == selectedRow))
+                                }
+                                if (r == activeRow) {
+                                    val dividerHeightPx = with(density) { 48.dp.roundToPx() }
+                                    var currentHeightPx = rHPx.toFloat()
+                                    var lastClickTime by remember { mutableStateOf(0L) }
+                                    Box(
+                                        Modifier
+                                            .zIndex(1f)
+                                            .offset { IntOffset(0, yOff + rHPx - dividerHeightPx / 2) }
+                                            .size(gutterW, 48.dp)
+                                            .pointerInput(r, "tap") {
+                                                awaitPointerEventScope {
+                                                    while (true) {
+                                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                                        val up = waitForUpOrCancellation()
+                                                        if (up != null && (up.uptimeMillis - down.uptimeMillis) < 200) {
+                                                            if (up.uptimeMillis - lastClickTime < 300) {
+                                                                onAutoResizeRow(r)
+                                                            }
+                                                            lastClickTime = up.uptimeMillis
                                                         }
-                                                        lastClickTime = up.uptimeMillis
                                                     }
                                                 }
                                             }
-                                        }
-                                        .pointerInput(r, "drag") {
-                                            detectDragGestures(
-                                                onDragStart = { currentHeightPx = rHPx.toFloat() },
-                                                onDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    currentHeightPx += dragAmount.y
-                                                    val newHeightDp = with(density) { currentHeightPx.toDp() }.value / scale
-                                                    onResizeRow(r, newHeightDp.coerceAtLeast(24f))
-                                                }
-                                            )
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .size(20.dp, 20.dp)
-                                            .background(hue, RoundedCornerShape(10.dp)),
+                                            .pointerInput(r, "drag") {
+                                                detectDragGestures(
+                                                    onDragStart = { currentHeightPx = rHPx.toFloat() },
+                                                    onDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        currentHeightPx += dragAmount.y
+                                                        val newHeightDp = with(density) { currentHeightPx.toDp() }.value / scale
+                                                        onResizeRow(r, newHeightDp.coerceAtLeast(24f))
+                                                    }
+                                                )
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("↕", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Box(
+                                            Modifier
+                                                .size(20.dp, 20.dp)
+                                                .background(hue, RoundedCornerShape(10.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("↕", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                // 2D virtual cell body: SubcomposeLayout places only visible cells (and
-                // merged-region origins that overlap the viewport) at pixel coordinates.
-                // Both scroll axes are driven by detectDragGestures so a single finger
-                // drag moves H and V simultaneously, and fling runs per-axis via Animatable.
-                SubcomposeLayout(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clipToBounds()
-                        .pointerInput(maxHScroll, maxVScroll) {
-                            val velocityTracker = VelocityTracker()
-                            detectDragGestures(
-                                onDragStart = { velocityTracker.resetTracking() },
-                                onDragEnd = {
-                                    val v = velocityTracker.calculateVelocity()
-                                    coroutineScope.launch {
-                                        Animatable(hScrollPx.toFloat()).animateDecay(-v.x, flingSpec) {
-                                            hScrollPx = value.roundToInt().coerceIn(0, maxHScroll)
+                    // 2D virtual cell body: SubcomposeLayout places only visible cells (and
+                    // merged-region origins that overlap the viewport) at pixel coordinates.
+                    // Both scroll axes are driven by detectDragGestures so a single finger
+                    // drag moves H and V simultaneously, and fling runs per-axis via Animatable.
+                    SubcomposeLayout(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clipToBounds()
+                            .pointerInput(maxHScroll, maxVScroll) {
+                                val velocityTracker = VelocityTracker()
+                                detectDragGestures(
+                                    onDragStart = { velocityTracker.resetTracking() },
+                                    onDragEnd = {
+                                        val v = velocityTracker.calculateVelocity()
+                                        coroutineScope.launch {
+                                            Animatable(hScrollPx.toFloat()).animateDecay(-v.x, flingSpec) {
+                                                hScrollPx = value.roundToInt().coerceIn(0, maxHScroll)
+                                            }
                                         }
-                                    }
-                                    coroutineScope.launch {
-                                        Animatable(vScrollPx.toFloat()).animateDecay(-v.y, flingSpec) {
-                                            vScrollPx = value.roundToInt().coerceIn(0, maxVScroll)
+                                        verticalFling = coroutineScope.launch {
+                                            Animatable(vScrollPx.toFloat()).animateDecay(-v.y, flingSpec) {
+                                                vScrollPx = value.roundToInt().coerceIn(0, maxVScroll)
+                                            }
                                         }
-                                    }
-                                },
-                                onDrag = { change, delta ->
-                                    hScrollPx = (hScrollPx - delta.x.roundToInt()).coerceIn(0, maxHScroll)
-                                    vScrollPx = (vScrollPx - delta.y.roundToInt()).coerceIn(0, maxVScroll)
-                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
-                                    change.consume()
-                                },
-                            )
-                        },
-                ) { constraints ->
-                    val vpWPx = constraints.maxWidth
-                    val vpHPx = constraints.maxHeight
+                                    },
+                                    onDrag = { change, delta ->
+                                        hScrollPx = (hScrollPx - delta.x.roundToInt()).coerceIn(0, maxHScroll)
+                                        vScrollPx = (vScrollPx - delta.y.roundToInt()).coerceIn(0, maxVScroll)
+                                        velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                        change.consume()
+                                    },
+                                )
+                            },
+                    ) { constraints ->
+                        val vpWPx = constraints.maxWidth
+                        val vpHPx = constraints.maxHeight
 
-                    val fr = findFirstVisible(vScrollPx, numRows, getRowOffset)
-                    val lr = (findFirstVisible(vScrollPx + vpHPx, numRows, getRowOffset) + 1).coerceAtMost(numRows - 1)
-                    val fc = findFirstVisible(hScrollPx, columns, getColOffset)
-                    val lc = (findFirstVisible(hScrollPx + vpWPx, columns, getColOffset) + 1).coerceAtMost(columns - 1)
+                        val fr = findFirstVisible(vScrollPx, numRows, getRowOffset)
+                        val lr = (findFirstVisible(vScrollPx + vpHPx, numRows, getRowOffset) + 1).coerceAtMost(numRows - 1)
+                        val fc = findFirstVisible(hScrollPx, columns, getColOffset)
+                        val lc = (findFirstVisible(hScrollPx + vpWPx, columns, getColOffset) + 1).coerceAtMost(columns - 1)
 
-                    val placements = mutableListOf<Pair<Placeable, IntOffset>>()
-                    val renderedMerges = mutableSetOf<Int>()
+                        val placements = mutableListOf<Pair<Placeable, IntOffset>>()
+                        val renderedMerges = mutableSetOf<Int>()
 
-                    // Subcompose every visible cell. Merge origins consume their full
-                    // (colSpan * cellW) x (rowSpan * cellH) size; non-origin cells within
-                    // a merge are skipped entirely - the origin already covers that area.
-                    for (r in fr..lr) {
-                        for (c in fc..lc) {
-                            val mi = mergedRegions.indexOfFirst { it.contains(r, c) }
-                            val merge = mergedRegions.getOrNull(mi)
-                            if (merge != null && !merge.isOrigin(r, c)) continue
-                            if (merge != null && mi in renderedMerges) continue
-                            if (merge != null) renderedMerges.add(mi)
+                        // Subcompose every visible cell. Merge origins consume their full
+                        // (colSpan * cellW) x (rowSpan * cellH) size; non-origin cells within
+                        // a merge are skipped entirely - the origin already covers that area.
+                        for (r in fr..lr) {
+                            for (c in fc..lc) {
+                                val mi = mergedRegions.indexOfFirst { it.contains(r, c) }
+                                val merge = mergedRegions.getOrNull(mi)
+                                if (merge != null && !merge.isOrigin(r, c)) continue
+                                if (merge != null && mi in renderedMerges) continue
+                                if (merge != null) renderedMerges.add(mi)
 
-                            val oR = merge?.firstRow ?: r
-                            val oC = merge?.firstCol ?: c
-                            val spanW = (merge?.let { getColOffset(it.lastCol + 1) - getColOffset(it.firstCol) } ?: (getColOffset(oC + 1) - getColOffset(oC)))
-                            val spanH = (merge?.let { getRowOffset(it.lastRow + 1) - getRowOffset(it.firstRow) } ?: (getRowOffset(oR + 1) - getRowOffset(oR)))
-                            val xOff = getColOffset(oC) - hScrollPx
-                            val yOff = getRowOffset(oR) - vScrollPx
-                            val isSelected = if (merge != null) {
-                                selectedRow in merge.firstRow..merge.lastRow &&
-                                    selectedCol in merge.firstCol..merge.lastCol
-                            } else {
-                                r == selectedRow && c == selectedCol
+                                val oR = merge?.firstRow ?: r
+                                val oC = merge?.firstCol ?: c
+                                val spanW = (merge?.let { getColOffset(it.lastCol + 1) - getColOffset(it.firstCol) } ?: (getColOffset(oC + 1) - getColOffset(oC)))
+                                val spanH = (merge?.let { getRowOffset(it.lastRow + 1) - getRowOffset(it.firstRow) } ?: (getRowOffset(oR + 1) - getRowOffset(oR)))
+                                val xOff = getColOffset(oC) - hScrollPx
+                                val yOff = getRowOffset(oR) - vScrollPx
+                                val isSelected = if (merge != null) {
+                                    selectedRow in merge.firstRow..merge.lastRow &&
+                                        selectedCol in merge.firstCol..merge.lastCol
+                                } else {
+                                    r == selectedRow && c == selectedCol
+                                }
+                                val m = subcompose("c_${oR}_${oC}") {
+                                    GridCell(
+                                        value = rows.getOrNull(oR)?.getOrElse(oC) { "" } ?: "",
+                                        width = with(density) { spanW.toDp() },
+                                        height = with(density) { spanH.toDp() },
+                                        fontSize = cellFont,
+                                        selected = isSelected,
+                                        hue = hue,
+                                        isHeader = oR == 0,
+                                        onClick = { handleSelect(oR, oC) },
+                                    )
+                                }
+                                placements.add(
+                                    m.first().measure(Constraints.fixed(spanW, spanH)) to IntOffset(xOff, yOff),
+                                )
                             }
-                            val m = subcompose("c_${oR}_${oC}") {
+                        }
+
+                        // A merged origin whose top-left is outside the visible row/col range
+                        // can still overlap the viewport. Subcompose it here so the visible
+                        // portion of the spanning cell is not blank.
+                        mergedRegions.forEachIndexed { mi, merge ->
+                            if (mi in renderedMerges) return@forEachIndexed
+                            val xM = getColOffset(merge.firstCol)
+                            val yM = getRowOffset(merge.firstRow)
+                            val wM = getColOffset(merge.lastCol + 1) - xM
+                            val hM = getRowOffset(merge.lastRow + 1) - yM
+                            if (xM >= hScrollPx + vpWPx || xM + wM <= hScrollPx) return@forEachIndexed
+                            if (yM >= vScrollPx + vpHPx || yM + hM <= vScrollPx) return@forEachIndexed
+                            val xOff = xM - hScrollPx
+                            val yOff = yM - vScrollPx
+                            val isSelected = selectedRow in merge.firstRow..merge.lastRow &&
+                                selectedCol in merge.firstCol..merge.lastCol
+                            val m = subcompose("c_${merge.firstRow}_${merge.firstCol}") {
                                 GridCell(
-                                    value = rows.getOrNull(oR)?.getOrElse(oC) { "" } ?: "",
-                                    width = with(density) { spanW.toDp() },
-                                    height = with(density) { spanH.toDp() },
+                                    value = rows.getOrNull(merge.firstRow)?.getOrElse(merge.firstCol) { "" } ?: "",
+                                    width = with(density) { wM.toDp() },
+                                    height = with(density) { hM.toDp() },
                                     fontSize = cellFont,
                                     selected = isSelected,
                                     hue = hue,
-                                    isHeader = oR == 0,
-                                    onClick = { handleSelect(oR, oC) },
+                                    isHeader = merge.firstRow == 0,
+                                    onClick = { handleSelect(merge.firstRow, merge.firstCol) },
                                 )
                             }
                             placements.add(
-                                m.first().measure(Constraints.fixed(spanW, spanH)) to IntOffset(xOff, yOff),
+                                m.first().measure(Constraints.fixed(wM, hM)) to IntOffset(xOff, yOff),
                             )
                         }
-                    }
 
-                    // A merged origin whose top-left is outside the visible row/col range
-                    // can still overlap the viewport. Subcompose it here so the visible
-                    // portion of the spanning cell is not blank.
-                    mergedRegions.forEachIndexed { mi, merge ->
-                        if (mi in renderedMerges) return@forEachIndexed
-                        val xM = getColOffset(merge.firstCol)
-                        val yM = getRowOffset(merge.firstRow)
-                        val wM = getColOffset(merge.lastCol + 1) - xM
-                        val hM = getRowOffset(merge.lastRow + 1) - yM
-                        if (xM >= hScrollPx + vpWPx || xM + wM <= hScrollPx) return@forEachIndexed
-                        if (yM >= vScrollPx + vpHPx || yM + hM <= vScrollPx) return@forEachIndexed
-                        val xOff = xM - hScrollPx
-                        val yOff = yM - vScrollPx
-                        val isSelected = selectedRow in merge.firstRow..merge.lastRow &&
-                            selectedCol in merge.firstCol..merge.lastCol
-                        val m = subcompose("c_${merge.firstRow}_${merge.firstCol}") {
-                            GridCell(
-                                value = rows.getOrNull(merge.firstRow)?.getOrElse(merge.firstCol) { "" } ?: "",
-                                width = with(density) { wM.toDp() },
-                                height = with(density) { hM.toDp() },
-                                fontSize = cellFont,
-                                selected = isSelected,
-                                hue = hue,
-                                isHeader = merge.firstRow == 0,
-                                onClick = { handleSelect(merge.firstRow, merge.firstCol) },
-                            )
+                        layout(vpWPx, vpHPx) {
+                            placements.forEach { (placeable, offset) -> placeable.placeRelative(offset) }
                         }
-                        placements.add(
-                            m.first().measure(Constraints.fixed(wM, hM)) to IntOffset(xOff, yOff),
-                        )
-                    }
-
-                    layout(vpWPx, vpHPx) {
-                        placements.forEach { (placeable, offset) -> placeable.placeRelative(offset) }
                     }
                 }
             }

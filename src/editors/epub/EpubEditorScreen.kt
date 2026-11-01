@@ -38,10 +38,12 @@ import dev.kern.shared.theme.KernType
 import dev.kern.shared.theme.OutfitFamily
 import dev.kern.shared.theme.SoraFamily
 import dev.kern.shared.ui.EditorChrome
+import dev.kern.shared.ui.FastScrollBox
 import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.KernIcons
 import dev.kern.shared.ui.pinchZoom
+import dev.kern.shared.ui.rememberFastScrollTarget
 import dev.kern.shared.ui.rememberZoomState
 import kotlin.math.roundToInt
 
@@ -78,12 +80,14 @@ private fun ChapterReader(vm: EpubEditorViewModel, hue: Color, modifier: Modifie
     val chapterLabel = vm.chapterTitles().getOrNull(vm.currentChapter)?.takeIf { it.isNotBlank() }
         ?: "Chapter ${vm.currentChapter + 1}"
 
+    val scroll = rememberScrollState()
+
     Column(modifier.background(colors.sunken)) {
-        Box(Modifier.weight(1f).pinchZoom(zoom)) {
+        FastScrollBox(rememberFastScrollTarget(scroll), hue, Modifier.weight(1f).pinchZoom(zoom)) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scroll)
                     .padding(horizontal = 18.dp, vertical = 16.dp),
             ) {
                 Column(

@@ -44,9 +44,11 @@ class FastScrollMathTest {
     }
 
     @Test
-    fun pixelMetrics_unmeasuredViewportCannotScroll() {
-        assertFalse(PixelMetrics(0, 1000, 0).canScroll)
-        assertTrue(PixelMetrics(0, 1000, 1).canScroll)
+    fun pixelMetrics_unreportedViewportStillScrollsWithTheShortestThumb() {
+        val m = PixelMetrics(500, 1000, 0)
+        assertTrue(m.canScroll)
+        assertEquals(0.5f, m.fraction, eps)
+        assertEquals(0f, m.visibleFraction, eps)
     }
 
     @Test
