@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +54,8 @@ import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 import dev.kern.shared.theme.OutfitFamily
 import dev.kern.shared.ui.EditorChrome
+import dev.kern.shared.ui.FastScrollBox
+import dev.kern.shared.ui.rememberFastScrollTarget
 import dev.kern.shared.ui.EditorToolbar
 import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
@@ -264,8 +267,10 @@ private fun FindReplaceBar(vm: WordEditorViewModel) {
 private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
     val colors = KernTheme.colors
     val zoom = rememberZoomState()
-    Box(modifier.background(colors.sunken).pinchZoom(zoom)) {
+    val listState = rememberLazyListState()
+    FastScrollBox(rememberFastScrollTarget(listState), hue, modifier.background(colors.sunken).pinchZoom(zoom)) {
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 18.dp, vertical = 16.dp),

@@ -54,6 +54,8 @@ import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 import dev.kern.shared.theme.PlexMonoFamily
+import dev.kern.shared.ui.FastScrollBox
+import dev.kern.shared.ui.rememberFastScrollTarget
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
 import dev.kern.shared.ui.KernBottomSheet
@@ -147,15 +149,17 @@ private fun PdfPager(
             .pinchZoom(zoom),
     ) {
         if (vm.pageCount > 0 && containerWidthPx > 0) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = PageVerticalGap),
-                verticalArrangement = Arrangement.spacedBy(PageVerticalGap),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                items(vm.pageCount) { index ->
-                    PdfPageView(vm, index, baseWidthPx = containerWidthPx, zoom = zoom.scale)
+            FastScrollBox(rememberFastScrollTarget(listState), hue, Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = PageVerticalGap),
+                    verticalArrangement = Arrangement.spacedBy(PageVerticalGap),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    items(vm.pageCount) { index ->
+                        PdfPageView(vm, index, baseWidthPx = containerWidthPx, zoom = zoom.scale)
+                    }
                 }
             }
 

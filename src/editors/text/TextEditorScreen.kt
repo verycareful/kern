@@ -9,19 +9,13 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import dev.kern.shared.theme.KernRadius
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -54,6 +48,7 @@ import dev.kern.shared.DocumentFormat
 import dev.kern.shared.theme.KernColorScheme
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.PlexMonoFamily
+import dev.kern.shared.ui.AutoHide
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
 import dev.kern.shared.ui.KernIcons
@@ -61,6 +56,7 @@ import dev.kern.shared.ui.KernSegmented
 import dev.kern.shared.ui.SegmentItem
 import dev.kern.shared.ui.ToolbarButton
 import dev.kern.shared.ui.ToolbarSeparator
+import dev.kern.shared.ui.rememberAutoHide
 import dev.kern.editors.text.MarkdownFormatting.Inline
 import dev.kern.editors.text.MarkdownFormatting.LineMark
 
@@ -96,7 +92,7 @@ fun TextEditorScreen(
         onExportToUri = vm::exportTo,
         toolbar = if (editing) ({ SourceToolbar(vm) }) else null,
     ) { modifier ->
-        val switch = rememberAutoHide()
+        val switch = rememberAutoHide(SWITCH_HIDE_DELAY_MS)
         Box(modifier.background(KernTheme.colors.bg).revealOnTouch(switch)) {
             if (editing) SourceEditor(vm, onScroll = switch::reveal) else PreviewPane(vm, onScroll = switch::reveal)
             if (vm.markdown) {
@@ -134,36 +130,6 @@ private fun ModeSwitch(vm: TextEditorViewModel, onSwitch: () -> Unit) {
 /** How long the switch stays after the last scroll or touch. */
 private const val SWITCH_HIDE_DELAY_MS = 2_500L
 private val SWITCH_ELEVATION = 6.dp
-
-/** Visibility of a control that shows on activity and fades out after a pause. */
-@Stable
-private class AutoHide {
-    var visible by mutableStateOf(true)
-        private set
-    var activity by mutableIntStateOf(0)
-        private set
-
-    fun reveal() {
-        visible = true
-        activity++
-    }
-
-    fun hide() {
-        visible = false
-    }
-}
-
-@Composable
-private fun rememberAutoHide(): AutoHide {
-    val autoHide = remember { AutoHide() }
-    LaunchedEffect(autoHide) {
-        snapshotFlow { autoHide.activity }.collectLatest {
-            delay(SWITCH_HIDE_DELAY_MS)
-            autoHide.hide()
-        }
-    }
-    return autoHide
-}
 
 /** Reveals [autoHide] on every touch inside, without taking the touch from the content. */
 private fun Modifier.revealOnTouch(autoHide: AutoHide): Modifier = pointerInput(autoHide) {
