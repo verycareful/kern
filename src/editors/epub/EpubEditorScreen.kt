@@ -83,6 +83,8 @@ private fun ChapterReader(vm: EpubEditorViewModel, hue: Color, modifier: Modifie
         ?: "Chapter ${vm.currentChapter + 1}"
 
     val scroll = rememberScrollState()
+    // Every chapter opens at its beginning, however it was reached.
+    LaunchedEffect(vm.currentChapter) { scroll.scrollTo(0) }
 
     Column(modifier.background(colors.sunken)) {
         FastScrollBox(rememberFastScrollTarget(scroll), hue, Modifier.weight(1f).pinchZoom(zoom)) {
