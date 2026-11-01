@@ -58,24 +58,26 @@ jobs:
           mkdir -p dist
           cp build/outputs/apk/debug/*.apk "dist/kern-${GITHUB_REF_NAME}-debug.apk"
 
+      # The release notes are the tag's own section of CHANGELOG.md and nothing
+      # else. A tag with no section stops here instead of publishing empty notes.
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > dist/release-notes.md
+          if [ ! -s dist/release-notes.md ]; then
+            echo "::error title=No changelog entry::CHANGELOG.md has no '## [${version}]' section."
+            exit 1
+          fi
+          cat dist/release-notes.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Kern ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          # Prepended to the auto-generated notes, so anyone downloading the asset
-          # sees what they are installing before they install it.
-          body: |
-            **Note: this asset is a debug build.**
-
-            `kern-${{ github.ref_name }}-debug.apk` is produced by `assembleDebug`. It is signed with
-            Android's auto-generated debug keystore and is marked `debuggable`. Kern does not have a
-            release signing key yet, and an unsigned release build cannot be installed at all, so the
-            debug build is what ships for now.
-
-            What that means in practice: the signing identity is not stable between builds, so
-            installing this over an existing copy of Kern may fail with a signature mismatch
-            (uninstall the old copy first), and a debuggable build lets any process with adb access
-            attach to the app. Tracked in #16.
+          body_path: dist/release-notes.md
           files: dist/kern-${{ github.ref_name }}-debug.apk
