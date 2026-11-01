@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +65,12 @@ interface FastScrollTarget {
 
     /** Jumps to [fraction] of the scrollable range, clamped to 0..1. */
     fun scrollToFraction(fraction: Float)
+
+    /**
+     * Called as the bar appears ([shown] true) and fades out. A scroller that draws
+     * its own indicator hides it here, so only one bar is ever on screen.
+     */
+    fun onBarShown(shown: Boolean) {}
 }
 
 /**
@@ -204,6 +211,7 @@ fun FastScrollBox(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val bar = rememberAutoHide(FAST_SCROLL_HIDE_DELAY_MS, initiallyVisible = false)
+    LaunchedEffect(target, bar.visible) { target.onBarShown(bar.visible) }
     var heightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val insetPx = with(density) { TrackInset.toPx() }

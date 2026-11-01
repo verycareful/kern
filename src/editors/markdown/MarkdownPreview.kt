@@ -122,6 +122,11 @@ private class WebViewScrollTarget : FastScrollTarget {
         val v = view ?: return
         v.scrollTo(v.scrollX, metrics.offsetFor(fraction))
     }
+
+    /** The WebView's own vertical indicator is hidden while the fast scroll bar shows. */
+    override fun onBarShown(shown: Boolean) {
+        view?.isVerticalScrollBarEnabled = !shown
+    }
 }
 
 private class PreviewClient(private val context: Context) : WebViewClient() {
