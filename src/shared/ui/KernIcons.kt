@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.Delete
@@ -147,6 +148,7 @@ object KernIcons {
     val AlignBottom = Icons.Outlined.VerticalAlignBottom
     val Trash = Icons.Outlined.Delete
     val Download = Icons.Outlined.Download
+    val Copy = Icons.Outlined.ContentCopy
     val Info = Icons.Outlined.Info
     val Link = Icons.Outlined.Link
     val Pin = Icons.Outlined.PushPin

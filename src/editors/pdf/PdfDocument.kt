@@ -3,7 +3,10 @@ package dev.kern.editors.pdf
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Point
+import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
+import android.graphics.pdf.models.selection.SelectionBoundary
 import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -41,15 +44,24 @@ class PdfDocument private constructor(
             renderer.openPage(page).use { p ->
                 val width = p.width.toFloat()
                 val height = p.height.toFloat()
-                p.searchText(query).map { found ->
-                    PdfTextMatch(
-                        page,
-                        found.bounds.map { PageRect(it.left / width, it.top / height, it.right / width, it.bottom / height) },
-                    )
-                }
+                p.searchText(query).map { found -> PdfTextMatch(page, found.bounds.map { it.toPageRect(width, height) }) }
+            }
+        }
+
+        override fun select(page: Int, start: PagePoint, end: PagePoint): PdfSelection? = synchronized(lock) {
+            renderer.openPage(page).use { p ->
+                val width = p.width.toFloat()
+                val height = p.height.toFloat()
+                fun boundary(at: PagePoint) = SelectionBoundary(Point((at.x * width).roundToInt(), (at.y * height).roundToInt()))
+                val contents = p.selectContent(boundary(start), boundary(end))?.selectedTextContents.orEmpty()
+                val text = contents.joinToString("") { it.text }
+                if (text.isBlank()) null
+                else PdfSelection(page, text, contents.flatMap { c -> c.bounds.map { it.toPageRect(width, height) } })
             }
         }
     }
+
+    private fun RectF.toPageRect(width: Float, height: Float) = PageRect(left / width, top / height, right / width, bottom / height)
 
     /**
      * Renders [index] into an ARGB bitmap [targetWidthPx] wide, height following the

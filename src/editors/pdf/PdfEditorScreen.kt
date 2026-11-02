@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -54,7 +55,14 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import android.content.ClipData
+import android.content.ClipboardManager
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import dev.kern.shared.DocumentFormat
+import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.theme.KernColorScheme
 import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.theme.KernRadius
@@ -212,6 +220,14 @@ private fun PdfPager(
             ) {
                 Text("${(zoom.scale * 100).roundToInt()}%", style = KernType.meta, color = hue)
             }
+        }
+
+        vm.selection?.let { selected ->
+            SelectionBar(
+                text = selected.text,
+                onClose = vm::clearSelection,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = SelectionBarBottomPadding),
+            )
         }
 
         PdfToolsLayer(vm, toolsSheetOpen, onToolsSheetOpenChange)
@@ -411,6 +427,76 @@ private fun Modifier.drawFindMatches(matches: List<PdfTextMatch>, current: PdfTe
         }
     }
 
+/** Long-press then drag over a page selects its text, where the device can read PDF text. */
+private fun Modifier.selectTextOnLongPress(vm: PdfEditorViewModel, page: Int): Modifier =
+    if (!vm.canSelectText) this else pointerInput(page) {
+        var start = Offset.Zero
+        fun Offset.onPage() = PagePoint(x / size.width, y / size.height)
+        detectDragGesturesAfterLongPress(
+            onDragStart = {
+                start = it
+                vm.selectText(page, it.onPage(), it.onPage())
+            },
+            onDrag = { change, _ ->
+                change.consume()
+                vm.selectText(page, start.onPage(), change.position.onPage())
+            },
+        )
+    }
+
+private fun Modifier.drawSelection(selection: PdfSelection?, colors: KernColorScheme): Modifier =
+    if (selection == null) this else drawWithContent {
+        drawContent()
+        val tint = colors.accent.copy(alpha = SELECTION_ALPHA)
+        for (r in selection.rects) {
+            drawRect(
+                tint,
+                topLeft = Offset(r.left * size.width, r.top * size.height),
+                size = Size((r.right - r.left) * size.width, (r.bottom - r.top) * size.height),
+            )
+        }
+    }
+
+private const val SELECTION_ALPHA = 0.35f
+private val SelectionBarBottomPadding = 60.dp
+private const val SELECTION_PREVIEW_CHARS = 40
+
+/** The selected text's actions: copy it, or let it go. */
+@Composable
+private fun SelectionBar(text: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = KernTheme.colors
+    val context = LocalContext.current
+    Row(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .shadow(6.dp, RoundedCornerShape(KernRadius.field))
+            .clip(RoundedCornerShape(KernRadius.field))
+            .background(colors.surface)
+            .padding(start = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text.replace('\n', ' ').take(SELECTION_PREVIEW_CHARS),
+            style = KernType.meta,
+            color = colors.textMid,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        ToolbarButton(
+            KernIcons.Copy,
+            "Copy selected text",
+            onClick = {
+                context.getSystemService(ClipboardManager::class.java)
+                    ?.setPrimaryClip(ClipData.newPlainText("PDF text", text))
+                onClose()
+            },
+            label = "Copy",
+        )
+        KernIconButton(KernIcons.Close, "Clear selection", onClick = onClose)
+    }
+}
+
 @Composable
 private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zoom: Float) {
     val colors = KernTheme.colors
@@ -428,6 +514,7 @@ private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zo
         ) {
             val matches = vm.pdfMatches.filter { it.page == index }
             val current = vm.currentMatch
+            val selected = vm.selection?.takeIf { it.page == index }
             Image(
                 bitmap = bmp,
                 contentDescription = "Page ${index + 1}",
@@ -435,6 +522,8 @@ private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zo
                 modifier = Modifier
                     .width(widthDp)
                     .drawFindMatches(if (vm.matchCount == 0) emptyList() else matches, current, colors)
+                    .drawSelection(selected, colors)
+                    .selectTextOnLongPress(vm, index)
                     .shadow(8.dp, RoundedCornerShape(KernRadius.pdfPage))
                     .clip(RoundedCornerShape(KernRadius.pdfPage))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.pdfPage)),
