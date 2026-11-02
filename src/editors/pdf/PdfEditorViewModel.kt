@@ -85,6 +85,44 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
         selection = null
     }
 
+    // --- Links ----------------------------------------------------------------------
+
+    /** A web, mail or phone link the user tapped, waiting for them to confirm opening it. */
+    var pendingLink by mutableStateOf<String?>(null)
+        private set
+
+    /** A page an internal link asked to show; the screen scrolls there and clears it. */
+    var linkTargetPage by mutableStateOf<Int?>(null)
+        private set
+
+    private val linkCache = HashMap<Int, List<PdfLink>>()
+
+    /**
+     * Handles a tap at [point] on [page]: follows a link there, or clears the selection.
+     * A link out of the document is only offered, never opened, until the user confirms.
+     */
+    fun tapPage(page: Int, point: PagePoint) {
+        val layer = textLayer
+        if (selection != null || layer == null) {
+            clearSelection()
+            return
+        }
+        viewModelScope.launch {
+            val links = linkCache[page] ?: withContext(Dispatchers.IO) {
+                runCatching { layer.links(page) }.getOrDefault(emptyList())
+            }.also { linkCache[page] = it }
+            when (val link = links.at(point)) {
+                is PdfLink.External -> if (isOpenable(link.uri)) pendingLink = link.uri
+                is PdfLink.GoTo -> if (link.page in 0 until pageCount) linkTargetPage = link.page
+                null -> Unit
+            }
+        }
+    }
+
+    fun dismissLink() { pendingLink = null }
+
+    fun consumeLinkTarget() { linkTargetPage = null }
+
     init {
         viewModelScope.launch {
             selectRequests.collectLatest { request ->
@@ -237,6 +275,12 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
         private const val SEARCH_DEBOUNCE_MS = 250L
 
         private val SEARCHING = FindMessage("Searching", isError = false)
+
+        /** The kinds of link handed to other apps, the same ones the Markdown preview opens. */
+        private val OPENABLE_SCHEMES = setOf("http", "https", "mailto", "tel")
+
+        internal fun isOpenable(uri: String): Boolean =
+            uri.substringBefore(':', "").lowercase() in OPENABLE_SCHEMES
 
         /** One 1-based page range: "4" or "2-7", after whitespace has been stripped. */
         private val SINGLE_RANGE = Regex("""(\d{1,6})(?:-(\d{1,6}))?""")

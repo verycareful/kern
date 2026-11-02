@@ -15,6 +15,22 @@ data class PdfTextMatch(val page: Int, val rects: List<PageRect>)
 /** Selected text on one page, and the boxes covering it. */
 data class PdfSelection(val page: Int, val text: String, val rects: List<PageRect>)
 
+/** A link on a page: the boxes that take a tap, and where it goes. */
+sealed interface PdfLink {
+    val rects: List<PageRect>
+
+    /** A link out of the document, such as a web address. */
+    data class External(override val rects: List<PageRect>, val uri: String) : PdfLink
+
+    /** A link to another page of the same document (0-based [page]). */
+    data class GoTo(override val rects: List<PageRect>, val page: Int) : PdfLink
+}
+
+/** The link whose boxes contain [point], if any. */
+fun List<PdfLink>.at(point: PagePoint): PdfLink? = firstOrNull { link ->
+    link.rects.any { point.x in it.left..it.right && point.y in it.top..it.bottom }
+}
+
 /**
  * What Kern can do with a PDF's text, as opposed to its pictures of pages. The framework
  * renderer provides it from Android 15 on; another PDF engine can provide the same
@@ -26,6 +42,9 @@ interface PdfTextLayer {
 
     /** The text between [start] and [end] on [page], in reading order, or null if there is none. */
     fun select(page: Int, start: PagePoint, end: PagePoint): PdfSelection?
+
+    /** Every link on [page]: links out of the document, then links within it. */
+    fun links(page: Int): List<PdfLink>
 }
 
 /** Why a PDF has no text layer on this device, for the find bar to show. */

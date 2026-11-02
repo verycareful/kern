@@ -55,7 +55,12 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.content.ClipboardManager
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
@@ -160,6 +165,13 @@ private fun PdfPager(
     var containerWidthPx by remember { mutableIntStateOf(0) }
     var goToOpen by remember { mutableStateOf(false) }
 
+    // An internal link was tapped: show the page it points at.
+    LaunchedEffect(vm.linkTargetPage) {
+        val page = vm.linkTargetPage ?: return@LaunchedEffect
+        listState.animateScrollToItem(page)
+        vm.consumeLinkTarget()
+    }
+
     // Scrolls the current match's page into view, then down to the match itself.
     LaunchedEffect(vm.find.revision) {
         val match = vm.currentMatch ?: return@LaunchedEffect
@@ -232,6 +244,8 @@ private fun PdfPager(
 
         PdfToolsLayer(vm, toolsSheetOpen, onToolsSheetOpenChange)
     }
+
+    vm.pendingLink?.let { link -> OpenLinkDialog(link, onDismiss = vm::dismissLink) }
 
     if (goToOpen) {
         GoToPageDialog(
@@ -461,6 +475,35 @@ private const val SELECTION_ALPHA = 0.35f
 private val SelectionBarBottomPadding = 60.dp
 private const val SELECTION_PREVIEW_CHARS = 40
 
+/**
+ * Asks before a PDF link leaves Kern, showing the whole address: a link's visible text
+ * can say one thing and point at another.
+ */
+@Composable
+private fun OpenLinkDialog(link: String, onDismiss: () -> Unit) {
+    val colors = KernTheme.colors
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text("Open link?") },
+        text = { Text(link, style = KernType.meta.copy(fontFamily = PlexMonoFamily), color = colors.text) },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDismiss()
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
+                    }
+                },
+            ) { Text("Open", color = colors.accent) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textMid) } },
+    )
+}
+
 /** The selected text's actions: copy it, or let it go. */
 @Composable
 private fun SelectionBar(text: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -524,6 +567,9 @@ private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zo
                     .drawFindMatches(if (vm.matchCount == 0) emptyList() else matches, current, colors)
                     .drawSelection(selected, colors)
                     .selectTextOnLongPress(vm, index)
+                    .pointerInput(index) {
+                        detectTapGestures { vm.tapPage(index, PagePoint(it.x / size.width, it.y / size.height)) }
+                    }
                     .shadow(8.dp, RoundedCornerShape(KernRadius.pdfPage))
                     .clip(RoundedCornerShape(KernRadius.pdfPage))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.pdfPage)),

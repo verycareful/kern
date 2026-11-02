@@ -59,6 +59,16 @@ class PdfDocument private constructor(
                 else PdfSelection(page, text, contents.flatMap { c -> c.bounds.map { it.toPageRect(width, height) } })
             }
         }
+
+        override fun links(page: Int): List<PdfLink> = synchronized(lock) {
+            renderer.openPage(page).use { p ->
+                val width = p.width.toFloat()
+                val height = p.height.toFloat()
+                fun List<RectF>.onPage() = map { it.toPageRect(width, height) }
+                p.linkContents.map { PdfLink.External(it.bounds.onPage(), it.uri.toString()) } +
+                    p.gotoLinks.map { PdfLink.GoTo(it.bounds.onPage(), it.destination.pageNumber) }
+            }
+        }
     }
 
     private fun RectF.toPageRect(width: Float, height: Float) = PageRect(left / width, top / height, right / width, bottom / height)
