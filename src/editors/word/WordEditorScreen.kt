@@ -57,6 +57,7 @@ import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.FastScrollBox
 import dev.kern.shared.ui.rememberFastScrollTarget
 import dev.kern.shared.ui.EditorToolbar
+import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.KernIcons
@@ -64,6 +65,12 @@ import dev.kern.shared.ui.ToolbarButton
 import dev.kern.shared.ui.ToolbarSeparator
 import dev.kern.shared.ui.pinchZoom
 import dev.kern.shared.ui.rememberZoomState
+import dev.kern.shared.find.FindMark
+import dev.kern.shared.theme.KernColorScheme
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import kotlin.math.roundToInt
 
 private const val DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -92,6 +99,7 @@ fun WordEditorScreen(
         exportMimeType = DOCX_MIME,
         exportFileName = vm.fileName.ifBlank { "export.docx" },
         onExportToUri = vm::exportTo,
+        find = vm,
         toolbar = {
             WordToolbar(
                 vm = vm,
@@ -102,12 +110,7 @@ fun WordEditorScreen(
             )
         },
     ) { modifier ->
-        Column(modifier.fillMaxSize()) {
-            if (vm.isFindOpen) {
-                FindReplaceBar(vm)
-            }
-            WordPage(vm, hue, Modifier.weight(1f))
-        }
+        WordPage(vm, hue, modifier.fillMaxSize())
     }
 
     if (showColor) {
@@ -151,7 +154,7 @@ fun WordEditorScreen(
 
 /**
  * Full formatting toolbar with Undo/Redo, Character styling, Paragraph styles,
- * Lists, Indentation, and Find & Replace.
+ * Lists and Indentation.
  */
 @Composable
 private fun WordToolbar(
@@ -190,76 +193,6 @@ private fun WordToolbar(
         ToolbarButton(KernIcons.NumberedList, "Numbered list", onClick = vm::toggleNumberedList, active = props?.listType == WordDocument.ListType.NUMBER, enabled = enabled)
         ToolbarButton(KernIcons.IndentIncrease, "Increase indent", onClick = vm::increaseIndent, enabled = enabled)
         ToolbarButton(KernIcons.IndentDecrease, "Decrease indent", onClick = vm::decreaseIndent, enabled = enabled)
-        ToolbarSeparator()
-        ToolbarButton(KernIcons.FindReplace, "Find and replace", onClick = vm::toggleFind, active = vm.isFindOpen)
-    }
-}
-
-@Composable
-private fun FindReplaceBar(vm: WordEditorViewModel) {
-    val colors = KernTheme.colors
-    val matches = vm.matches
-    val matchText = if (matches.isEmpty()) "No matches" else "${vm.currentMatchIndex + 1} of ${matches.size}"
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.surface)
-            .border(1.dp, colors.borderSoft)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            BasicTextField(
-                value = vm.searchQuery,
-                onValueChange = { vm.searchQuery = it },
-                textStyle = TextStyle(color = colors.text, fontSize = 14.sp),
-                cursorBrush = SolidColor(colors.accent),
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(KernRadius.innerSmall))
-                    .background(colors.sunken)
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                decorationBox = { inner ->
-                    if (vm.searchQuery.isEmpty()) {
-                        Text("Find...", color = colors.textDim, fontSize = 14.sp)
-                    }
-                    inner()
-                },
-            )
-            Text(matchText, style = KernType.meta, color = colors.textMid)
-            KernIconButton(KernIcons.ArrowUp, "Previous", onClick = vm::prevMatch)
-            KernIconButton(KernIcons.ArrowDown, "Next", onClick = vm::nextMatch)
-            KernIconButton(KernIcons.Close, "Close", onClick = vm::toggleFind)
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            BasicTextField(
-                value = vm.replaceQuery,
-                onValueChange = { vm.replaceQuery = it },
-                textStyle = TextStyle(color = colors.text, fontSize = 14.sp),
-                cursorBrush = SolidColor(colors.accent),
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(KernRadius.innerSmall))
-                    .background(colors.sunken)
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                decorationBox = { inner ->
-                    if (vm.replaceQuery.isEmpty()) {
-                        Text("Replace with...", color = colors.textDim, fontSize = 14.sp)
-                    }
-                    inner()
-                },
-            )
-            ToolbarButton(KernIcons.Pen, "Replace", onClick = vm::replaceOne, label = "Replace")
-            ToolbarButton(KernIcons.Check, "Replace all", onClick = vm::replaceAll, label = "All")
-        }
     }
 }
 
@@ -268,6 +201,11 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
     val colors = KernTheme.colors
     val zoom = rememberZoomState()
     val listState = rememberLazyListState()
+    LaunchedEffect(vm.find.revision) {
+        val match = vm.currentMatch ?: return@LaunchedEffect
+        // Item 0 is the paper header, so block i is item i + 1.
+        listState.animateScrollToItem(match.key.block + 1, -listState.layoutInfo.viewportSize.height / MATCH_SCROLL_DIVISOR)
+    }
     FastScrollBox(rememberFastScrollTarget(listState), hue, modifier.background(colors.sunken).pinchZoom(zoom)) {
         LazyColumn(
             state = listState,
@@ -305,8 +243,7 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
                             EditableParagraph(
                                 value = vm.fields[index] ?: TextFieldValue(WordRichText.toAnnotated(block.runs)),
                                 props = props,
-                                isFindOpen = vm.isFindOpen,
-                                searchQuery = vm.searchQuery,
+                                highlights = findHighlights(vm, index, colors),
                                 scale = zoom.scale,
                                 onChange = { vm.onValueChange(index, it) },
                                 onFocus = { vm.setFocus(index) },
@@ -317,6 +254,7 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
                             TablePreviewCard(
                                 blockIndex = index,
                                 rows = currentRows,
+                                findMark = tableMark(vm, index),
                                 scale = zoom.scale,
                                 onEditTable = { vm.openTableEditor(index) },
                             )
@@ -367,6 +305,37 @@ private fun WordPage(vm: WordEditorViewModel, hue: Color, modifier: Modifier) {
     }
 }
 
+/** A revealed match lands this fraction of the viewport (1 / divisor) below the top. */
+private const val MATCH_SCROLL_DIVISOR = 4
+
+/**
+ * Paints the find matches in paragraph [index] without touching its value, so what
+ * the user types never picks the highlight up.
+ */
+private fun findHighlights(vm: WordEditorViewModel, index: Int, colors: KernColorScheme): VisualTransformation {
+    val current = vm.currentMatch
+    val ranges = vm.matches.filter { it.key.block == index && !it.key.isCell }
+    if (ranges.isEmpty()) return VisualTransformation.None
+    val matchStyle = FindHighlight.matchStyle(colors)
+    val currentStyle = FindHighlight.currentStyle(colors)
+    return VisualTransformation { text ->
+        val painted = buildAnnotatedString {
+            append(text)
+            for (m in ranges) {
+                if (m.match.end <= text.length) addStyle(if (m == current) currentStyle else matchStyle, m.match.start, m.match.end)
+            }
+        }
+        TransformedText(painted, OffsetMapping.Identity)
+    }
+}
+
+/** A table's whole card is tinted while one of its cells matches; its cells are edited in the table sheet. */
+private fun tableMark(vm: WordEditorViewModel, index: Int): FindMark = when {
+    vm.currentMatch?.key?.let { it.block == index && it.isCell } == true -> FindMark.CURRENT
+    vm.matches.any { it.key.block == index && it.key.isCell } -> FindMark.MATCH
+    else -> FindMark.NONE
+}
+
 private data class KindMetrics(val size: TextUnit, val weight: FontWeight, val lineHeight: TextUnit)
 
 private fun metricsFor(kind: WordDocument.Kind): KindMetrics = when (kind) {
@@ -387,8 +356,7 @@ private fun mapTextAlign(align: WordDocument.Align): TextAlign = when (align) {
 private fun EditableParagraph(
     value: TextFieldValue,
     props: WordDocument.ParaProps,
-    isFindOpen: Boolean,
-    searchQuery: String,
+    highlights: VisualTransformation,
     scale: Float,
     onChange: (TextFieldValue) -> Unit,
     onFocus: () -> Unit,
@@ -396,20 +364,6 @@ private fun EditableParagraph(
     val colors = KernTheme.colors
     val m = metricsFor(props.kind)
     val indentPadding = (props.indentTwips / 20).dp.coerceAtMost(120.dp) * scale
-
-    val displayValue = if (isFindOpen && searchQuery.isNotEmpty()) {
-        val highlighted = WordRichText.highlightMatches(
-            text = value.annotatedString,
-            query = searchQuery,
-            matchColor = colors.accentSoft,
-            activeMatchColor = colors.accent,
-            isCurrentBlock = true,
-            currentMatchIndex = 0,
-        )
-        value.copy(annotatedString = highlighted)
-    } else {
-        value
-    }
 
     Row(
         modifier = Modifier
@@ -424,8 +378,9 @@ private fun EditableParagraph(
             Text("1. ", style = TextStyle(fontFamily = OutfitFamily, fontSize = m.size * scale, color = colors.accent), modifier = Modifier.padding(end = 4.dp))
         }
         BasicTextField(
-            value = displayValue,
+            value = value,
             onValueChange = onChange,
+            visualTransformation = highlights,
             textStyle = TextStyle(
                 fontFamily = OutfitFamily,
                 fontSize = m.size * scale,
@@ -448,6 +403,7 @@ private fun TablePreviewCard(
     rows: List<List<String>>,
     scale: Float,
     onEditTable: () -> Unit,
+    findMark: FindMark = FindMark.NONE,
 ) {
     val colors = KernTheme.colors
     Column(
@@ -456,6 +412,13 @@ private fun TablePreviewCard(
             .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(KernRadius.innerSmall))
             .background(colors.sunken)
+            .background(
+                when (findMark) {
+                    FindMark.NONE -> Color.Transparent
+                    FindMark.MATCH -> FindHighlight.match(colors)
+                    FindMark.CURRENT -> FindHighlight.current(colors)
+                },
+            )
             .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.innerSmall))
             .padding(12.dp),
     ) {

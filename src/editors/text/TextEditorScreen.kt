@@ -10,6 +10,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.shadow
@@ -52,6 +55,7 @@ import dev.kern.shared.theme.PlexMonoFamily
 import dev.kern.shared.ui.AutoHide
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.FastScrollBox
+import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.ui.EditorToolbar
 import dev.kern.shared.ui.KernIcons
 import dev.kern.shared.ui.KernSegmented
@@ -94,6 +98,7 @@ fun TextEditorScreen(
         exportFileName = vm.fileName.ifBlank { if (vm.markdown) "export.md" else "export.txt" },
         onExportToUri = vm::exportTo,
         toolbar = if (editing) ({ SourceToolbar(vm) }) else null,
+        find = vm,
     ) { modifier ->
         val switch = rememberAutoHide(SWITCH_HIDE_DELAY_MS)
         Box(modifier.background(KernTheme.colors.bg).revealOnTouch(switch)) {
@@ -145,10 +150,17 @@ private fun Modifier.revealOnTouch(autoHide: AutoHide): Modifier = pointerInput(
 @Composable
 private fun SourceEditor(vm: TextEditorViewModel, hue: Color, onScroll: () -> Unit) {
     val colors = KernTheme.colors
-    val highlight = remember(colors, vm.markdown) {
-        if (vm.markdown) markdownHighlighting(colors) else null
-    }
+    val highlight = remember(colors, vm.markdown) { sourceHighlighting(vm, colors) }
     val scroll = rememberScrollState()
+    var layout by remember { mutableStateOf<(() -> TextLayoutResult?)?>(null) }
+    LaunchedEffect(vm.find.revision) {
+        val matches = vm.sourceMatches
+        val match = matches.getOrNull(vm.find.currentIn(matches.size)) ?: return@LaunchedEffect
+        val result = layout?.invoke() ?: return@LaunchedEffect
+        if (match.start > result.layoutInput.text.length) return@LaunchedEffect
+        val lineTop = result.getLineTop(result.getLineForOffset(match.start))
+        scroll.animateScrollTo((lineTop - scroll.viewportSize * MATCH_VIEWPORT_FRACTION).toInt().coerceAtLeast(0))
+    }
     val currentOnScroll by rememberUpdatedState(onScroll)
     LaunchedEffect(scroll) {
         snapshotFlow { scroll.value }.drop(1).collect { currentOnScroll() }
@@ -167,6 +179,7 @@ private fun SourceEditor(vm: TextEditorViewModel, hue: Color, onScroll: () -> Un
             cursorBrush = SolidColor(colors.accent),
             lineLimits = TextFieldLineLimits.MultiLine(),
             outputTransformation = highlight,
+            onTextLayout = { layout = it },
         )
     }
 }
@@ -179,7 +192,16 @@ private fun PreviewPane(vm: TextEditorViewModel, hue: Color, onScroll: () -> Uni
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = KernTheme.colors.accent)
         }
     } else {
-        MarkdownPreview(rendered, KernTheme.colors, hue, Modifier.fillMaxSize(), onScroll = onScroll)
+        MarkdownPreview(
+            rendered,
+            KernTheme.colors,
+            hue,
+            Modifier.fillMaxSize(),
+            onScroll = onScroll,
+            findQuery = vm.previewQuery,
+            findCurrent = vm.find.currentIn(vm.matchCount),
+            onFindResult = { _, total -> vm.onPreviewFindResult(total) },
+        )
     }
 }
 
@@ -215,12 +237,27 @@ private fun SourceToolbar(vm: TextEditorViewModel) {
     }
 }
 
-/** Colours the Markdown syntax in the source; see [MarkdownHighlighter]. */
-private fun markdownHighlighting(colors: KernColorScheme): OutputTransformation {
+/** Where a revealed match sits in the viewport, as a fraction of its height from the top. */
+private const val MATCH_VIEWPORT_FRACTION = 0.3f
+
+/**
+ * Colours the Markdown syntax in the source (see [MarkdownHighlighter]) and paints the
+ * find matches over it.
+ */
+private fun sourceHighlighting(vm: TextEditorViewModel, colors: KernColorScheme): OutputTransformation {
     val styles = MarkdownHighlighter.Kind.entries.associateWith { it.style(colors) }
+    val matchStyle = FindHighlight.matchStyle(colors)
+    val currentStyle = FindHighlight.currentStyle(colors)
     return OutputTransformation {
-        for (span in MarkdownHighlighter.spans(asCharSequence())) {
-            addStyle(styles.getValue(span.kind), span.start, span.end)
+        if (vm.markdown) {
+            for (span in MarkdownHighlighter.spans(asCharSequence())) {
+                addStyle(styles.getValue(span.kind), span.start, span.end)
+            }
+        }
+        val matches = vm.sourceMatches
+        val current = vm.find.currentIn(matches.size)
+        matches.forEachIndexed { i, match ->
+            if (match.end <= length) addStyle(if (i == current) currentStyle else matchStyle, match.start, match.end)
         }
     }
 }

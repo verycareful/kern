@@ -2,6 +2,7 @@ package dev.kern.editors.epub
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -9,6 +10,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.kern.shared.find.FindMessages
+import dev.kern.shared.find.FindState
+import dev.kern.shared.find.FindTarget
+import dev.kern.shared.find.SegmentMatch
+import dev.kern.shared.find.findIn
 import dev.kern.shared.io.DocumentIo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,7 +25,7 @@ import kotlinx.coroutines.withContext
  * prev/next) and edits block text. Edits are tracked by (chapter index, block
  * index) so saving applies only them onto the original EPUB (see [EpubDocument]).
  */
-class EpubEditorViewModel(app: Application) : AndroidViewModel(app) {
+class EpubEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     var fileName by mutableStateOf("")
         private set
@@ -46,11 +52,65 @@ class EpubEditorViewModel(app: Application) : AndroidViewModel(app) {
     fun chapterTitles(): List<String> = chapters.map { it.title }
 
     /** Current (possibly edited) text for a block in the current chapter. */
-    fun blockText(block: EpubDocument.Block): String = edits[currentChapter to block.index] ?: block.text
+    fun blockText(block: EpubDocument.Block): String = blockText(currentChapter, block)
 
-    fun editBlock(block: EpubDocument.Block, text: String) {
-        val key = currentChapter to block.index
+    private fun blockText(chapter: Int, block: EpubDocument.Block): String = edits[chapter to block.index] ?: block.text
+
+    fun editBlock(block: EpubDocument.Block, text: String) = setBlockText(currentChapter, block, text)
+
+    private fun setBlockText(chapter: Int, block: EpubDocument.Block, text: String) {
+        val key = chapter to block.index
         if (text == block.text) edits.remove(key) else edits[key] = text
+    }
+
+    // Find and replace
+
+    override val find = FindState()
+
+    /** A block: [position] in the [chapter]'s block list (not the block's own index). */
+    data class BlockSpot(val chapter: Int, val position: Int)
+
+    val matches: List<SegmentMatch<BlockSpot>> by derivedStateOf {
+        val finder = find.activeFinder ?: return@derivedStateOf emptyList()
+        finder.findIn(
+            chapters.asSequence().flatMapIndexed { c, chapter ->
+                chapter.blocks.asSequence().mapIndexed { i, block -> BlockSpot(c, i) to blockText(c, block) }
+            },
+        )
+    }
+
+    override val matchCount: Int get() = matches.size
+    override val canReplace: Boolean get() = true
+
+    val currentMatch: SegmentMatch<BlockSpot>? get() = matches.getOrNull(find.currentIn(matches.size))
+
+    override fun replaceCurrent() {
+        val finder = find.finder ?: return
+        val match = currentMatch ?: return
+        val block = chapters.getOrNull(match.key.chapter)?.blocks?.getOrNull(match.key.position) ?: return
+        finder.replaceAt(blockText(match.key.chapter, block), match.match, find.replacement)
+            .onSuccess {
+                setBlockText(match.key.chapter, block, it)
+                find.message = null
+                find.reveal()
+            }
+            .onFailure { find.message = FindMessages.failed(it) }
+    }
+
+    /** Replaces every match in every chapter; nothing changes if any replacement fails. */
+    override fun replaceAll() {
+        val finder = find.finder ?: return
+        val outcome = runCatching {
+            chapters.flatMapIndexed { c, chapter ->
+                chapter.blocks.mapNotNull { block ->
+                    val text = blockText(c, block)
+                    if (finder.count(text) == 0) null else Triple(c, block, finder.replaceAll(text, find.replacement).getOrThrow())
+                }
+            }
+        }
+        val changes = outcome.getOrElse { find.message = FindMessages.failed(it); return }
+        for ((c, block, result) in changes) setBlockText(c, block, result.value)
+        find.message = FindMessages.replaced(changes.sumOf { it.third.count }, find.deletes)
     }
 
     fun goToChapter(index: Int) {

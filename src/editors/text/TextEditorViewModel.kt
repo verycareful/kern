@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
@@ -15,6 +16,10 @@ import dev.kern.editors.markdown.EmojiTable
 import dev.kern.editors.markdown.FileImageResolver
 import dev.kern.editors.markdown.MarkdownRenderer
 import dev.kern.shared.DocumentFormat
+import dev.kern.shared.find.FindMessages
+import dev.kern.shared.find.FindState
+import dev.kern.shared.find.FindTarget
+import dev.kern.shared.find.TextMatch
 import dev.kern.shared.io.DocumentIo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,11 +35,13 @@ import kotlinx.coroutines.withContext
  * saved, so undoing back to the saved text clears the unsaved mark.
  */
 @OptIn(ExperimentalFoundationApi::class)
-class TextEditorViewModel(app: Application) : AndroidViewModel(app) {
+class TextEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     enum class Mode { EDIT, PREVIEW }
 
     val state = TextFieldState()
+
+    override val find = FindState()
 
     var fileName by mutableStateOf("")
         private set
@@ -51,6 +58,63 @@ class TextEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private var savedText by mutableStateOf("")
     val dirty: Boolean by derivedStateOf { !loading && !state.text.contentEquals(savedText) }
+
+    /** Matches in the source while the find bar is open in Edit mode. */
+    val sourceMatches: List<TextMatch> by derivedStateOf {
+        val finder = find.activeFinder
+        if (finder == null || mode != Mode.EDIT) emptyList() else finder.findAll(state.text)
+    }
+
+    /** Matches the preview's WebView reports; it searches literally and ignores case. */
+    var previewMatchCount by mutableIntStateOf(0)
+        private set
+
+    /** What the preview searches for: the find text while the bar is open, else nothing. */
+    val previewQuery: String get() = if (find.isOpen) find.query else ""
+
+    fun onPreviewFindResult(total: Int) {
+        previewMatchCount = total
+    }
+
+    override val matchCount: Int get() = when {
+        mode == Mode.EDIT -> sourceMatches.size
+        previewQuery.isEmpty() -> 0
+        else -> previewMatchCount
+    }
+    override val canReplace: Boolean get() = mode == Mode.EDIT
+    override val supportsOptions: Boolean get() = mode == Mode.EDIT
+
+    /** Replaces the current match as one undoable edit; the next match becomes current. */
+    override fun replaceCurrent() {
+        val finder = find.finder ?: return
+        val matches = sourceMatches
+        if (matches.isEmpty()) return
+        val match = matches[find.currentIn(matches.size)]
+        finder.expand(state.text, match, find.replacement)
+            .onSuccess { value ->
+                state.edit {
+                    replace(match.start, match.end, value)
+                    selection = TextRange(match.start + value.length)
+                }
+                find.message = null
+                find.reveal()
+            }
+            .onFailure { find.message = FindMessages.failed(it) }
+    }
+
+    /** Replaces every match as one undoable edit; nothing changes if any replacement fails. */
+    override fun replaceAll() {
+        val finder = find.finder ?: return
+        val text = state.text
+        val matches = sourceMatches
+        if (matches.isEmpty()) return
+        val values = runCatching { matches.map { finder.expand(text, it, find.replacement).getOrThrow() } }
+            .getOrElse { find.message = FindMessages.failed(it); return }
+        state.edit {
+            for (i in matches.indices.reversed()) replace(matches[i].start, matches[i].end, values[i])
+        }
+        find.message = FindMessages.replaced(matches.size, find.deletes)
+    }
 
     private var document: TextDocument? = null
     private var uri: Uri? = null
@@ -105,6 +169,7 @@ class TextEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun showEditor() {
         mode = Mode.EDIT
+        find.reveal()
     }
 
     /** Switches to the preview, rendering the current text unless it was rendered already. */

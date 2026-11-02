@@ -35,6 +35,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import dev.kern.shared.CellMerge
+import dev.kern.shared.find.FindMark
+import dev.kern.shared.find.GridFindTarget
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
@@ -99,6 +101,9 @@ private val CellHeight = 40.dp
 private val GutterWidth = 52.dp
 private val HeaderHeight = 36.dp
 
+/** How far in from the top-left edge a revealed cell lands, as a fraction of the viewport. */
+private const val REVEAL_MARGIN_FRACTION = 0.25f
+
 /** Spreadsheet-style column label for a zero-based index: 0 -> A, 25 -> Z, 26 -> AA. */
 fun spreadsheetColumnLabel(index: Int): String {
     var i = index
@@ -149,6 +154,7 @@ fun GridEditorScreen(
     onResizeRow: (Int, Float) -> Unit = { _, _ -> },
     onAutoResizeColumn: (Int) -> Unit = {},
     onAutoResizeRow: (Int) -> Unit = {},
+    find: GridFindTarget? = null,
 ) {
     UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
@@ -172,6 +178,7 @@ fun GridEditorScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = KernTheme.colors.bg,
         topBar = {
+            Column {
             KernTopBar(
                 title = title,
                 monoTitle = true,
@@ -180,6 +187,7 @@ fun GridEditorScreen(
                 subtitleColor = if (dirty) KernTheme.colors.accent else null,
                 onBack = { backDispatcher?.onBackPressed() },
                 actions = {
+                    find?.let { FindButton(it) }
                     KernIconButton(
                         KernIcons.Save,
                         "Save",
@@ -195,6 +203,8 @@ fun GridEditorScreen(
                     KernIconButton(KernIcons.Download, "Export a copy", onClick = { exportLauncher.launch(exportFileName) })
                 },
             )
+            find?.let { FindBar(it) }
+            }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -206,10 +216,18 @@ fun GridEditorScreen(
                     color = KernTheme.colors.danger,
                 )
                 else -> Column(Modifier.fillMaxSize()) {
+                    val revealKey = find?.find?.revision ?: 0
+                    LaunchedEffect(revealKey) {
+                        val cell = find?.currentCell ?: return@LaunchedEffect
+                        if (cell.sheet != currentSheet) onSelectSheet(cell.sheet)
+                        onSelect(cell.row, cell.col)
+                    }
+                    val revealCell = find?.currentCell?.takeIf { it.sheet == currentSheet }?.let { it.row to it.col }
+                    val markOf: (Int, Int) -> FindMark = { r, c -> find?.cellMark(currentSheet, r, c) ?: FindMark.NONE }
                     if (sheetNames.size > 1) SheetBar(sheetNames, currentSheet, onSelectSheet, hue)
                     CellReferenceBar(rows.isNotEmpty(), selectedRow, selectedCol, selectedValue, hue, onEditSelected)
                     Box(Modifier.weight(1f).pinchZoom(zoom)) {
-                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, mergedRegions, colWidths, rowHeights, onResizeColumn, onResizeRow, onAutoResizeColumn, onAutoResizeRow, Modifier.fillMaxSize())
+                        Grid(rows, selectedRow, selectedCol, hue, onSelect, zoom.scale, currentSheet, mergedRegions, colWidths, rowHeights, onResizeColumn, onResizeRow, onAutoResizeColumn, onAutoResizeRow, Modifier.fillMaxSize(), markOf, revealKey, revealCell)
                         if (zoom.scale != 1f) {
                             Box(
                                 modifier = Modifier
@@ -339,6 +357,9 @@ private fun Grid(
     onAutoResizeColumn: (Int) -> Unit = {},
     onAutoResizeRow: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
+    markOf: (Int, Int) -> FindMark = { _, _ -> FindMark.NONE },
+    revealKey: Int = 0,
+    revealCell: Pair<Int, Int>? = null,
 ) {
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -487,6 +508,20 @@ private fun Grid(
             val maxHScroll = (getColOffset(columns) - vpW).coerceAtLeast(0)
             val maxVScroll = (getRowOffset(numRows) - vpH).coerceAtLeast(0)
             val currentMaxVScroll by rememberUpdatedState(maxVScroll)
+            // Brings the current find match into view; keyed on the sheet too, since
+            // switching sheet resets the scroll first.
+            LaunchedEffect(revealKey, currentSheet) {
+                val (r, c) = revealCell ?: return@LaunchedEffect
+                val x = getColOffset(c)
+                val y = getRowOffset(r)
+                if (x < hScrollPx || getColOffset(c + 1) > hScrollPx + vpW) {
+                    hScrollPx = (x - (vpW * REVEAL_MARGIN_FRACTION).toInt()).coerceIn(0, maxHScroll)
+                }
+                if (y < vScrollPx || getRowOffset(r + 1) > vScrollPx + vpH) {
+                    verticalFling?.cancel()
+                    vScrollPx = (y - (vpH * REVEAL_MARGIN_FRACTION).toInt()).coerceIn(0, maxVScroll)
+                }
+            }
             val currentViewportH by rememberUpdatedState(vpH)
             val verticalTarget = remember {
                 object : FastScrollTarget {
@@ -643,6 +678,7 @@ private fun Grid(
                                         height = with(density) { spanH.toDp() },
                                         fontSize = cellFont,
                                         selected = isSelected,
+                                        mark = markOf(oR, oC),
                                         hue = hue,
                                         isHeader = oR == 0,
                                         onClick = { handleSelect(oR, oC) },
@@ -676,6 +712,7 @@ private fun Grid(
                                     height = with(density) { hM.toDp() },
                                     fontSize = cellFont,
                                     selected = isSelected,
+                                    mark = markOf(merge.firstRow, merge.firstCol),
                                     hue = hue,
                                     isHeader = merge.firstRow == 0,
                                     onClick = { handleSelect(merge.firstRow, merge.firstCol) },
@@ -726,8 +763,14 @@ private fun GridCell(
     hue: Color,
     isHeader: Boolean,
     onClick: () -> Unit,
+    mark: FindMark = FindMark.NONE,
 ) {
     val colors = KernTheme.colors
+    val findTint = when (mark) {
+        FindMark.NONE -> Color.Transparent
+        FindMark.MATCH -> FindHighlight.match(colors)
+        FindMark.CURRENT -> FindHighlight.current(colors)
+    }
     val bg = when {
         selected -> colors.accentSoft
         isHeader -> hue.copy(alpha = if (colors.dark) 0.20f else 0.13f)
@@ -737,6 +780,7 @@ private fun GridCell(
         modifier = Modifier
             .size(width, height)
             .background(bg)
+            .background(findTint)
             .border(width = if (selected) 2.dp else 0.5.dp, color = if (selected) colors.accent else colors.borderSoft)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp),

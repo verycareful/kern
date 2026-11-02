@@ -7,11 +7,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.kern.pdfbridge.QyraPdf
+import dev.kern.shared.find.FindMessage
+import dev.kern.shared.find.FindState
+import dev.kern.shared.find.FindTarget
 import dev.kern.shared.io.DocumentIo
+import dev.kern.shared.ui.ExternalLinks
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -22,7 +30,7 @@ import java.io.File
  * Qyra MuPDF bridge lands in later 0.1.5.0 commits, at which point this gains the
  * usual edit/save surface; for now Export just writes a verbatim copy.
  */
-class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
+class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     var fileName by mutableStateOf("")
         private set
@@ -36,6 +44,96 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     private var uri: Uri? = null
     private var document: PdfDocument? = null
     private var started = false
+
+    // Find
+
+    override val find = FindState()
+
+    private var textLayer by mutableStateOf<PdfTextLayer?>(null)
+
+    /** Matches of the current search across every page, in page order. */
+    var pdfMatches by mutableStateOf<List<PdfTextMatch>>(emptyList())
+        private set
+
+    private val searchQuery: String get() = if (find.isOpen) find.query else ""
+
+    override val matchCount: Int get() = if (searchQuery.isEmpty()) 0 else pdfMatches.size
+    override val supportsOptions: Boolean get() = false
+    override val unavailableReason: String? get() = if (!loading && error == null && textLayer == null) PDF_TEXT_NEEDS_ANDROID_15 else null
+
+    val currentMatch: PdfTextMatch? get() = if (searchQuery.isEmpty()) null else pdfMatches.getOrNull(find.currentIn(pdfMatches.size))
+
+    // Text selection
+
+    /** Whether page text can be selected here: the device has a PDF text layer. */
+    val canSelectText: Boolean get() = textLayer != null
+
+    private val lineCache = HashMap<Int, List<PdfTextLine>>()
+
+    /** The text lines of [page] for the selectable overlay; empty where there is no text layer. */
+    suspend fun pageLines(page: Int): List<PdfTextLine> {
+        val layer = textLayer ?: return emptyList()
+        lineCache[page]?.let { return it }
+        return withContext(Dispatchers.IO) { runCatching { layer.lines(page) }.getOrDefault(emptyList()) }
+            .also { lineCache[page] = it }
+    }
+
+    // Links
+
+    /** A web, mail or phone link the user tapped, waiting for them to confirm opening it. */
+    var pendingLink by mutableStateOf<String?>(null)
+        private set
+
+    /** A page an internal link asked to show; the screen scrolls there and clears it. */
+    var linkTargetPage by mutableStateOf<Int?>(null)
+        private set
+
+    private val linkCache = HashMap<Int, List<PdfLink>>()
+
+    /**
+     * Handles a tap at [point] on [page]: follows a link there, if there is one.
+     * A link out of the document is only offered, never opened, until the user confirms.
+     */
+    fun tapPage(page: Int, point: PagePoint) {
+        val layer = textLayer
+        if (layer == null) return
+        viewModelScope.launch {
+            val links = linkCache[page] ?: withContext(Dispatchers.IO) {
+                runCatching { layer.links(page) }.getOrDefault(emptyList())
+            }.also { linkCache[page] = it }
+            when (val link = links.at(point)) {
+                is PdfLink.External -> if (ExternalLinks.isOpenable(link.uri)) pendingLink = link.uri
+                is PdfLink.GoTo -> if (link.page in 0 until pageCount) linkTargetPage = link.page
+                null -> Unit
+            }
+        }
+    }
+
+    fun dismissLink() { pendingLink = null }
+
+    fun consumeLinkTarget() { linkTargetPage = null }
+
+    init {
+        // Searches every page off the main thread, a moment after typing stops; a new
+        // query cancels the search still running for the old one.
+        viewModelScope.launch {
+            snapshotFlow { searchQuery to textLayer }.collectLatest { (query, layer) ->
+                pdfMatches = emptyList()
+                if (query.isEmpty() || layer == null) return@collectLatest
+                delay(SEARCH_DEBOUNCE_MS)
+                find.message = SEARCHING
+                val found = withContext(Dispatchers.IO) {
+                    (0 until pageCount).flatMap { page ->
+                        ensureActive()
+                        runCatching { layer.search(page, query) }.getOrDefault(emptyList())
+                    }
+                }
+                pdfMatches = found
+                if (find.message == SEARCHING) find.message = null
+                find.reveal()
+            }
+        }
+    }
 
     // --- PDF tools (merge / split) state ---------------------------------------
     /** True while a bridge operation runs. */
@@ -81,6 +179,7 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
                 fileName = name
                 document = doc
                 pageCount = doc.pageCount
+                textLayer = doc.textLayer
                 loading = false
             }.onFailure {
                 error = it.message ?: "Could not open the PDF."
@@ -149,6 +248,11 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** How long typing must pause before a PDF search starts. */
+        private const val SEARCH_DEBOUNCE_MS = 250L
+
+        private val SEARCHING = FindMessage("Searching", isError = false)
+
         /** One 1-based page range: "4" or "2-7", after whitespace has been stripped. */
         private val SINGLE_RANGE = Regex("""(\d{1,6})(?:-(\d{1,6}))?""")
 

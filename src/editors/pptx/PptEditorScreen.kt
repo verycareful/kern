@@ -50,6 +50,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -57,11 +61,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kern.shared.DocumentFormat
+import dev.kern.shared.theme.KernColorScheme
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 import dev.kern.shared.ui.EditorChrome
 import dev.kern.shared.ui.EditorToolbar
+import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.ui.GoToPageDialog
 import dev.kern.shared.ui.KernBottomSheet
 import dev.kern.shared.ui.KernIconButton
@@ -150,7 +156,9 @@ fun PptEditorScreen(
         exportFileName = vm.fileName.ifBlank { "export.pptx" },
         onExportToUri = vm::exportTo,
         toolbar = if (landscape) null else ({ PptToolbar(vm, onShowSlides = { showSlides = true }) }),
+        find = vm,
     ) { modifier ->
+        LaunchedEffect(vm.find.revision) { vm.revealCurrentMatch() }
         SlideEditor(vm, hue, landscape, onShowSlides = { showSlides = true }, modifier = modifier)
     }
 
@@ -639,6 +647,24 @@ private fun SlideCanvas(vm: PptEditorViewModel, viewport: SlideViewport, modifie
  * dividing by the canvas scale, so they stay thumb-sized however far out the slide is
  * zoomed.
  */
+/** Paints the find matches in shape [index] of the current slide without touching its text. */
+private fun findHighlights(vm: PptEditorViewModel, index: Int, colors: KernColorScheme): VisualTransformation {
+    val current = vm.currentMatch
+    val ranges = vm.matches.filter { it.key.slide == vm.currentSlide && it.key.shape == index }
+    if (ranges.isEmpty()) return VisualTransformation.None
+    val matchStyle = FindHighlight.matchStyle(colors)
+    val currentStyle = FindHighlight.currentStyle(colors)
+    return VisualTransformation { text ->
+        val painted = buildAnnotatedString {
+            append(text)
+            for (m in ranges) {
+                if (m.match.end <= text.length) addStyle(if (m == current) currentStyle else matchStyle, m.match.start, m.match.end)
+            }
+        }
+        TransformedText(painted, OffsetMapping.Identity)
+    }
+}
+
 @Composable
 private fun SlideTextShape(
     vm: PptEditorViewModel,
@@ -691,6 +717,7 @@ private fun SlideTextShape(
                     vm.selectShape(index)
                     vm.updateShapeValue(index, it)
                 },
+                visualTransformation = findHighlights(vm, index, colors),
                 // The base for a run that names no font. A neutral system sans, not the
                 // app's own display face: this is document content, and it has to sit
                 // consistently beside runs whose named font maps to the same generic.

@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,7 +51,28 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import dev.kern.shared.DocumentFormat
+import dev.kern.shared.ui.OpenLinkDialog
+import dev.kern.shared.theme.KernColorScheme
+import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
@@ -103,6 +125,7 @@ fun PdfEditorScreen(
         exportFileName = vm.fileName.ifBlank { "export.pdf" },
         onExportToUri = vm::exportTo,
         toolbar = { PdfToolbar(onOpenTools = { toolsSheetOpen = true }) },
+        find = vm,
     ) { modifier ->
         PdfPager(
             vm = vm,
@@ -144,6 +167,23 @@ private fun PdfPager(
     val listState = rememberLazyListState()
     var containerWidthPx by remember { mutableIntStateOf(0) }
     var goToOpen by remember { mutableStateOf(false) }
+
+    // An internal link was tapped: show the page it points at.
+    LaunchedEffect(vm.linkTargetPage) {
+        val page = vm.linkTargetPage ?: return@LaunchedEffect
+        listState.animateScrollToItem(page)
+        vm.consumeLinkTarget()
+    }
+
+    // Scrolls the current match's page into view, then down to the match itself.
+    LaunchedEffect(vm.find.revision) {
+        val match = vm.currentMatch ?: return@LaunchedEffect
+        listState.scrollToItem(match.page)
+        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == match.page } ?: return@LaunchedEffect
+        val top = match.rects.minOfOrNull { it.top } ?: 0f
+        val viewport = listState.layoutInfo.viewportSize.height
+        listState.animateScrollBy(item.size * top - viewport * MATCH_VIEWPORT_FRACTION)
+    }
 
     Box(
         modifier
@@ -199,6 +239,8 @@ private fun PdfPager(
 
         PdfToolsLayer(vm, toolsSheetOpen, onToolsSheetOpenChange)
     }
+
+    vm.pendingLink?.let { link -> OpenLinkDialog(link, onDismiss = vm::dismissLink) }
 
     if (goToOpen) {
         GoToPageDialog(
@@ -375,6 +417,84 @@ private fun ExtractPagesDialog(onDismiss: () -> Unit, onExtract: (String) -> Uni
  * only re-rendered when that width changes, so pinch-zoom just rescales the existing
  * bitmap. When zoomed past 1x the page overflows the viewport and pans horizontally.
  */
+/** Where a revealed match lands, as a fraction of the viewport height from the top. */
+private const val MATCH_VIEWPORT_FRACTION = 0.3f
+
+/** Tints the boxes of [matches] over the page, the [current] one more strongly. */
+private fun Modifier.drawFindMatches(matches: List<PdfTextMatch>, current: PdfTextMatch?, colors: KernColorScheme): Modifier =
+    if (matches.isEmpty()) this else drawWithContent {
+        drawContent()
+        for (match in matches) {
+            val tint = if (match == current) FindHighlight.current(colors) else FindHighlight.match(colors)
+            for (r in match.rects) {
+                drawRect(
+                    tint,
+                    topLeft = Offset(r.left * size.width, r.top * size.height),
+                    size = Size((r.right - r.left) * size.width, (r.bottom - r.top) * size.height),
+                )
+            }
+        }
+    }
+
+/**
+ * The page's text laid invisibly over its picture, line by line, inside a selection
+ * container, so a long press gives Android's own text selection: handles, magnifier, and
+ * the Copy and Select all menu. Each line is stretched to the box the renderer reports
+ * for it, so the selection lines up with the printed text.
+ */
+@Composable
+private fun PdfTextOverlay(lines: List<PdfTextLine>, modifier: Modifier = Modifier) {
+    if (lines.isEmpty()) return
+    val colors = KernTheme.colors
+    val measurer = rememberTextMeasurer()
+    val selectionColors = remember(colors) {
+        TextSelectionColors(handleColor = colors.accent, backgroundColor = colors.accent.copy(alpha = SELECTION_ALPHA))
+    }
+    BoxWithConstraints(modifier) {
+        val pageWidth = constraints.maxWidth.toFloat()
+        val pageHeight = constraints.maxHeight.toFloat()
+        CompositionLocalProvider(LocalTextSelectionColors provides selectionColors) {
+            SelectionContainer {
+                Box(Modifier.fillMaxSize()) {
+                    for (line in lines) {
+                        if (line.rect.right > line.rect.left && line.rect.bottom > line.rect.top) {
+                            key(line) { OverlayLine(line, pageWidth, pageHeight, measurer) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One invisible line of page text, scaled to fill the box it is printed in. */
+@Composable
+private fun OverlayLine(line: PdfTextLine, pageWidth: Float, pageHeight: Float, measurer: TextMeasurer) {
+    val r = line.rect
+    val boxWidth = (r.right - r.left) * pageWidth
+    val boxHeight = (r.bottom - r.top) * pageHeight
+    val style = TextStyle(color = Color.Transparent, fontSize = with(LocalDensity.current) { boxHeight.toSp() })
+    val measured = remember(line.text, style) { measurer.measure(line.text, style, softWrap = false, maxLines = 1).size }
+    BasicText(
+        text = line.text,
+        style = style,
+        softWrap = false,
+        maxLines = 1,
+        modifier = Modifier.layout { measurable, c ->
+            val placeable = measurable.measure(c.copy(maxWidth = Constraints.Infinity, maxHeight = Constraints.Infinity))
+            layout(placeable.width, placeable.height) {
+                placeable.placeWithLayer((r.left * pageWidth).roundToInt(), (r.top * pageHeight).roundToInt()) {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = boxWidth / measured.width.coerceAtLeast(1)
+                    scaleY = boxHeight / measured.height.coerceAtLeast(1)
+                }
+            }
+        },
+    )
+}
+
+private const val SELECTION_ALPHA = 0.35f
+
 @Composable
 private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zoom: Float) {
     val colors = KernTheme.colors
@@ -390,16 +510,30 @@ private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zo
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             contentAlignment = Alignment.TopCenter,
         ) {
+            val matches = vm.pdfMatches.filter { it.page == index }
+            val current = vm.currentMatch
+            var lines by remember(index) { mutableStateOf<List<PdfTextLine>>(emptyList()) }
+            LaunchedEffect(index) { lines = vm.pageLines(index) }
+            Box(
+                Modifier
+                    .width(widthDp)
+                    .pointerInput(index) {
+                        detectTapGestures { vm.tapPage(index, PagePoint(it.x / size.width, it.y / size.height)) }
+                    },
+            ) {
             Image(
                 bitmap = bmp,
                 contentDescription = "Page ${index + 1}",
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
-                    .width(widthDp)
+                    .fillMaxWidth()
+                    .drawFindMatches(if (vm.matchCount == 0) emptyList() else matches, current, colors)
                     .shadow(8.dp, RoundedCornerShape(KernRadius.pdfPage))
                     .clip(RoundedCornerShape(KernRadius.pdfPage))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.pdfPage)),
             )
+            PdfTextOverlay(lines, Modifier.matchParentSize())
+            }
         }
     } else {
         // Placeholder sized to a portrait page (A4 ratio) so the list does not jump.

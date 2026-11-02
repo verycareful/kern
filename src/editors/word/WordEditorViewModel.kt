@@ -9,9 +9,19 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.kern.shared.find.FindMessage
+import dev.kern.shared.find.FindMessages
+import dev.kern.shared.find.FindState
+import dev.kern.shared.find.FindTarget
+import dev.kern.shared.find.SegmentMatch
+import dev.kern.shared.find.findIn
+import dev.kern.shared.find.replaceAll
+import dev.kern.shared.find.replaceAt
 import dev.kern.shared.io.DocumentIo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,7 +31,7 @@ import kotlinx.coroutines.withContext
  * Word editor state with full rich-text character formatting, paragraph/list styles,
  * interactive table mutations, find & replace, undo/redo history, and word counts.
  */
-class WordEditorViewModel(app: Application) : AndroidViewModel(app) {
+class WordEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     var fileName by mutableStateOf("")
         private set
@@ -74,60 +84,34 @@ class WordEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Find & Replace -----------------------------------------------------
 
-    var isFindOpen by mutableStateOf(false)
-        private set
-    var searchQuery by mutableStateOf("")
-    var replaceQuery by mutableStateOf("")
-    var currentMatchIndex by mutableIntStateOf(0)
-        private set
+    override val find = FindState()
 
-    data class SearchMatch(
-        val blockIndex: Int,
-        val matchIndexInBlock: Int,
-        val isTable: Boolean = false,
-        val row: Int = 0,
-        val col: Int = 0,
-    )
+    /** Where a match is: a paragraph ([row] and [col] -1) or one cell of a table. */
+    data class WordSpot(val block: Int, val row: Int = -1, val col: Int = -1) {
+        val isCell: Boolean get() = row >= 0
+    }
 
-    val matches by derivedStateOf {
-        val q = searchQuery
-        if (q.isBlank()) return@derivedStateOf emptyList<SearchMatch>()
-        val list = ArrayList<SearchMatch>()
+    val matches: List<SegmentMatch<WordSpot>> by derivedStateOf {
+        val finder = find.activeFinder ?: return@derivedStateOf emptyList()
+        finder.findIn(searchSegments())
+    }
+
+    override val matchCount: Int get() = matches.size
+    override val canReplace: Boolean get() = true
+
+    /** The current match, for the page to highlight and scroll to. */
+    val currentMatch: SegmentMatch<WordSpot>? get() = matches.getOrNull(find.currentIn(matches.size))
+
+    private fun searchSegments(): Sequence<Pair<WordSpot, CharSequence>> = sequence {
         blocks.forEachIndexed { i, block ->
             when (block) {
-                is WordDocument.ParagraphBlock -> {
-                    val text = fields[i]?.text ?: block.text
-                    var start = 0
-                    var matchCount = 0
-                    while (start < text.length) {
-                        val pos = text.indexOf(q, start, ignoreCase = true)
-                        if (pos < 0) break
-                        list.add(SearchMatch(blockIndex = i, matchIndexInBlock = matchCount))
-                        matchCount++
-                        start = pos + q.length
-                    }
-                }
-                is WordDocument.TableBlock -> {
-                    val grid = tableStates[i] ?: block.rows
-                    for (r in grid.indices) {
-                        for (c in grid[r].indices) {
-                            val cellText = grid[r][c]
-                            var start = 0
-                            var matchCount = 0
-                            while (start < cellText.length) {
-                                val pos = cellText.indexOf(q, start, ignoreCase = true)
-                                if (pos < 0) break
-                                list.add(SearchMatch(blockIndex = i, matchIndexInBlock = matchCount, isTable = true, row = r, col = c))
-                                matchCount++
-                                start = pos + q.length
-                            }
-                        }
-                    }
+                is WordDocument.ParagraphBlock -> yield(WordSpot(i) to (fields[i]?.text ?: block.text))
+                is WordDocument.TableBlock -> (tableStates[i] ?: block.rows).forEachIndexed { r, row ->
+                    row.forEachIndexed { c, cell -> yield(WordSpot(i, r, c) to cell) }
                 }
                 WordDocument.OpaqueBlock, is WordDocument.ImageBlock -> Unit
             }
         }
-        list
     }
 
     // ---- Statistics ---------------------------------------------------------
@@ -509,106 +493,94 @@ class WordEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Find & Replace Actions ---------------------------------------------
 
-    fun toggleFind() {
-        isFindOpen = !isFindOpen
-        if (!isFindOpen) {
-            searchQuery = ""
-            replaceQuery = ""
+    /**
+     * Replaces the current match as one undo step. In a paragraph the replacement keeps
+     * the formatting of the first character it replaces.
+     */
+    override fun replaceCurrent() {
+        val finder = find.finder ?: return
+        val match = currentMatch ?: return
+        val spot = match.key
+        if (spot.isCell) {
+            val cell = tableStates[spot.block]?.getOrNull(spot.row)?.getOrNull(spot.col) ?: return
+            finder.replaceAt(cell, match.match, find.replacement)
+                .onSuccess { editTableCell(spot.block, spot.row, spot.col, it); afterReplace() }
+                .onFailure { find.message = FindMessages.failed(it) }
+            return
         }
+        val field = fields[spot.block] ?: run { find.message = READ_ONLY_PARAGRAPH; return }
+        finder.replaceAt(field.annotatedString, match.match, find.replacement)
+            .onSuccess { replaced ->
+                pushSnapshot()
+                setParagraph(spot.block, field, replaced)
+                afterReplace()
+            }
+            .onFailure { find.message = FindMessages.failed(it) }
     }
 
-    fun nextMatch() {
-        val count = matches.size
-        if (count > 0) {
-            currentMatchIndex = (currentMatchIndex + 1) % count
-        }
-    }
-
-    fun prevMatch() {
-        val count = matches.size
-        if (count > 0) {
-            currentMatchIndex = (currentMatchIndex - 1 + count) % count
-        }
-    }
-
-    fun replaceOne() {
-        val mList = matches
-        if (currentMatchIndex !in mList.indices || searchQuery.isEmpty()) return
-        val match = mList[currentMatchIndex]
-        pushSnapshot()
-        if (match.isTable) {
-            val grid = tableStates[match.blockIndex] ?: return
-            val cell = grid.getOrNull(match.row)?.getOrNull(match.col) ?: return
-            val replaced = replaceNth(cell, searchQuery, replaceQuery, match.matchIndexInBlock)
-            editTableCell(match.blockIndex, match.row, match.col, replaced)
-        } else {
-            val field = fields[match.blockIndex] ?: return
-            val raw = field.text
-            val replaced = replaceNth(raw, searchQuery, replaceQuery, match.matchIndexInBlock)
-            val runs = WordRichText.toRuns(field.annotatedString)
-            val updatedAnnotated = WordRichText.toAnnotated(WordRichText.toRuns(androidx.compose.ui.text.AnnotatedString(replaced)))
-            fields[match.blockIndex] = field.copy(annotatedString = updatedAnnotated)
-            edits[match.blockIndex] = WordRichText.toRuns(updatedAnnotated)
-            dirty = true
-        }
-        if (currentMatchIndex >= matches.size && matches.isNotEmpty()) {
-            currentMatchIndex = 0
-        }
-    }
-
-    fun replaceAll() {
-        if (searchQuery.isEmpty()) return
-        pushSnapshot()
-        blocks.forEachIndexed { i, block ->
-            when (block) {
-                is WordDocument.ParagraphBlock -> {
-                    val field = fields[i] ?: return@forEachIndexed
-                    if (field.text.contains(searchQuery, ignoreCase = true)) {
-                        val newText = field.text.replace(searchQuery, replaceQuery, ignoreCase = true)
-                        val newAnnotated = androidx.compose.ui.text.AnnotatedString(newText)
-                        fields[i] = field.copy(annotatedString = newAnnotated)
-                        edits[i] = WordRichText.toRuns(newAnnotated)
-                        dirty = true
-                    }
-                }
-                is WordDocument.TableBlock -> {
-                    val grid = tableStates[i] ?: return@forEachIndexed
-                    var changed = false
-                    val newGrid = grid.map { row ->
-                        row.map { cell ->
-                            if (cell.contains(searchQuery, ignoreCase = true)) {
-                                changed = true
-                                cell.replace(searchQuery, replaceQuery, ignoreCase = true)
-                            } else {
-                                cell
-                            }
+    /** Replaces every match as one undo step; nothing changes if any replacement fails. */
+    override fun replaceAll() {
+        val finder = find.finder ?: return
+        val replacement = find.replacement
+        val outcome = runCatching {
+            val paragraphs = HashMap<Int, AnnotatedString>()
+            val tables = HashMap<Int, List<List<String>>>()
+            var count = 0
+            var readOnly = 0
+            blocks.forEachIndexed { i, block ->
+                when (block) {
+                    is WordDocument.ParagraphBlock -> {
+                        val field = fields[i]
+                        if (field == null) {
+                            if (finder.count(block.text) > 0) readOnly++
+                        } else if (finder.count(field.text) > 0) {
+                            val result = finder.replaceAll(field.annotatedString, replacement).getOrThrow()
+                            paragraphs[i] = result.value
+                            count += result.count
                         }
                     }
-                    if (changed) {
-                        tableStates[i] = newGrid
-                        tableEdits[i] = newGrid
-                        dirty = true
+                    is WordDocument.TableBlock -> {
+                        val grid = tableStates[i] ?: return@forEachIndexed
+                        var changed = false
+                        val newGrid = grid.map { row ->
+                            row.map { cell ->
+                                val result = finder.replaceAll(cell, replacement).getOrThrow()
+                                if (result.count > 0) changed = true
+                                count += result.count
+                                result.value
+                            }
+                        }
+                        if (changed) tables[i] = newGrid
                     }
+                    WordDocument.OpaqueBlock, is WordDocument.ImageBlock -> Unit
                 }
-                WordDocument.OpaqueBlock, is WordDocument.ImageBlock -> Unit
             }
+            Triple(paragraphs, tables, count to readOnly)
         }
-        currentMatchIndex = 0
+        val (paragraphs, tables, counts) = outcome.getOrElse { find.message = FindMessages.failed(it); return }
+        if (paragraphs.isNotEmpty() || tables.isNotEmpty()) {
+            pushSnapshot()
+            for ((i, text) in paragraphs) setParagraph(i, fields.getValue(i), text)
+            for ((i, grid) in tables) {
+                tableStates[i] = grid
+                tableEdits[i] = grid
+            }
+            dirty = true
+        }
+        val (count, readOnly) = counts
+        val replaced = FindMessages.replaced(count, replacement.isEmpty())
+        find.message = if (readOnly == 0) replaced else FindMessage("${replaced.text}, skipped $readOnly read-only paragraphs", isError = false)
     }
 
-    private fun replaceNth(text: String, target: String, replacement: String, n: Int): String {
-        var start = 0
-        var count = 0
-        while (start < text.length) {
-            val pos = text.indexOf(target, start, ignoreCase = true)
-            if (pos < 0) break
-            if (count == n) {
-                return text.substring(0, pos) + replacement + text.substring(pos + target.length)
-            }
-            count++
-            start = pos + target.length
-        }
-        return text
+    private fun setParagraph(index: Int, field: TextFieldValue, text: AnnotatedString) {
+        fields[index] = field.copy(annotatedString = text, selection = TextRange(field.selection.start.coerceAtMost(text.length)))
+        edits[index] = WordRichText.toRuns(text)
+        dirty = true
+    }
+
+    private fun afterReplace() {
+        find.message = null
+        find.reveal()
     }
 
     // ---- History Management -------------------------------------------------
@@ -720,5 +692,9 @@ class WordEditorViewModel(app: Application) : AndroidViewModel(app) {
             }
             onResult(result.isSuccess, result.exceptionOrNull()?.message)
         }
+    }
+
+    private companion object {
+        val READ_ONLY_PARAGRAPH = FindMessage("This paragraph is read-only, so it is found but not replaced", isError = true)
     }
 }

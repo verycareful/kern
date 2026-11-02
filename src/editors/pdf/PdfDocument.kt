@@ -3,9 +3,13 @@ package dev.kern.editors.pdf
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
+import android.graphics.pdf.models.selection.SelectionBoundary
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import androidx.annotation.RequiresApi
 import java.io.Closeable
 import java.io.IOException
 import kotlin.math.roundToInt
@@ -28,6 +32,45 @@ class PdfDocument private constructor(
     private val lock = Any()
 
     val pageCount: Int get() = renderer.pageCount
+
+    /** The page text, where the framework renderer can read it (Android 15 and later). */
+    val textLayer: PdfTextLayer? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) FrameworkTextLayer() else null
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    private inner class FrameworkTextLayer : PdfTextLayer {
+        override fun search(page: Int, query: String): List<PdfTextMatch> = synchronized(lock) {
+            renderer.openPage(page).use { p ->
+                val width = p.width.toFloat()
+                val height = p.height.toFloat()
+                p.searchText(query).map { found -> PdfTextMatch(page, found.bounds.map { it.toPageRect(width, height) }) }
+            }
+        }
+
+        override fun lines(page: Int): List<PdfTextLine> = synchronized(lock) {
+            renderer.openPage(page).use { p ->
+                val width = p.width.toFloat()
+                val height = p.height.toFloat()
+                // Selecting the whole page by character index gives one box per line.
+                val text = p.textContents.joinToString("") { it.text }
+                if (text.isEmpty()) return@use emptyList()
+                val contents = p.selectContent(SelectionBoundary(0), SelectionBoundary(text.length))?.selectedTextContents.orEmpty()
+                pairLines(contents.joinToString("") { it.text }, contents.flatMap { c -> c.bounds.map { it.toPageRect(width, height) } })
+            }
+        }
+
+        override fun links(page: Int): List<PdfLink> = synchronized(lock) {
+            renderer.openPage(page).use { p ->
+                val width = p.width.toFloat()
+                val height = p.height.toFloat()
+                fun List<RectF>.onPage() = map { it.toPageRect(width, height) }
+                p.linkContents.map { PdfLink.External(it.bounds.onPage(), it.uri.toString()) } +
+                    p.gotoLinks.map { PdfLink.GoTo(it.bounds.onPage(), it.destination.pageNumber) }
+            }
+        }
+    }
+
+    private fun RectF.toPageRect(width: Float, height: Float) = PageRect(left / width, top / height, right / width, bottom / height)
 
     /**
      * Renders [index] into an ARGB bitmap [targetWidthPx] wide, height following the

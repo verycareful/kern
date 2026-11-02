@@ -2,6 +2,41 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.14.0] - 2026-11-02 14:07 IST
+
+### Added
+- **Find and Replace** (`src/shared/find/`, `src/shared/ui/FindBar.kt`): a magnifier in every editor's top bar, left of Save, opens a find bar under the top bar with the match count, previous and next, a match case toggle (Aa, on by default) and a regex toggle (Regex, off by default). Where the format can be edited, a Replace switch shows a replace field with Replace and Replace all. An empty replace field deletes what it matches, and says so before anything is pressed: the field reads "Empty: matches are deleted", the buttons read Delete and Delete all, and the result says how many were deleted. Every match is highlighted and the current one more strongly; moving between matches scrolls to the current one. With regex off, the find text and the replacement are both taken literally; with regex on, `^` and `$` match at line boundaries and the replacement takes `$1` and `${name}` group references. An invalid pattern or a replacement naming a missing group says so in the bar and changes nothing. Back closes the bar before it leaves the editor
+  - Text and Markdown source: Replace and Replace all are each one undo step
+  - Markdown preview: find only, with the WebView's own search, which ignores case and regex, so those toggles are greyed out
+  - CSV and Excel: every cell, across every sheet of a workbook; moving to a match switches to its sheet, selects its cell and scrolls it into view. An Excel formula cell is found but not replaced, since writing its text back would turn the formula into plain text; Replace all reports how many it skipped
+  - Word: paragraphs and table cells; replacements keep the formatting of the text they replace, and Replace all is one undo step. The find and replace button moves from the formatting toolbar to the top bar
+  - PowerPoint: every text box on every slide; moving to a match shows its slide and selects its text box; replacements keep their formatting, and Replace all is one undo step
+  - EPUB: every chapter; moving to a match opens its chapter and scrolls to it
+  - PDF: find only. Every page is searched a moment after typing stops and matches are boxed over the page; the search ignores case and regex. Needs Android 15 or later, where the system can read a PDF's text; on older Android the bar says so
+- **PDF Text Selection**: long-press a page's text for Android's own text selection: drag the handles, then Copy or Select all from the menu. The page's text is laid invisibly over its picture, line by line, so the selection follows the printed lines. Android 15 or later
+- **PDF Links**: tapping a link follows it. A link to another page scrolls there; a web, mail or phone link first asks, showing the whole address, and opens only in the app the system picks, so Kern itself still makes no network requests. Android 15 or later; an internal link reaches Kern only when the PDF writes it as a GoTo action
+- `docs/architecture.md`: find and replace, and the PDF text layer behind find, selection and links
+
+### Changed
+- **Markdown Preview Links**: tapping a web, mail or phone link in the preview asks first, showing the whole address, as PDF links do (`src/shared/ui/OpenLinkDialog.kt`)
+
+### Fixed
+- **Word Replace**: replacing text no longer strips the formatting of the paragraph it is in
+- **Word Find Highlight**: typing in a paragraph while find was open kept the match highlight in that paragraph after find closed; the saved file was not affected
+
+### Tests
+- **Find Engine** (`TextFinderTest.kt`): literal and regex compiling, invalid patterns, match case and Unicode case folding, non-overlapping and empty matches, line anchors, replacing one match and all, literal `$` and `\` with regex off, numbered and named groups, escaped `$`, missing groups and a trailing `\` refused, lookbehind seeing the text before a match, a stale match refused
+- **Styled Replace** (`AnnotatedReplaceTest.kt`): a replacement taking the style of the first character it replaces, styles before and after shifting correctly, replacing across a style boundary, paragraph styles and string annotations following the text, replacing all keeping each match's style, group expansion, deleting a match
+- **Find Bar State** (`FindStateTest.kt`): defaults, opening and closing, wrapping between matches, clamping when matches shrink, restarting on a new query or toggle, when the editor is asked to reveal a match, the bar's messages, segment search
+- **Grid Search** (`GridSearchTest.kt`): sheet, row and column order, matches never spanning cells, replace all per cell, locked cells skipped and counted, groups per cell, a bad replacement refused
+- **Editors** (Robolectric): `TextEditorViewModelTest.kt` (source matches, the preview's count, replacing one and all as single undo steps, a bad replacement changing nothing), `ExcelEditorViewModelTest.kt` (every sheet, formula cells refused and skipped, formula cells following inserted rows and columns, a formula cell edited by hand becoming replaceable), `WordEditorViewModelTest.kt` (paragraphs and tables in order, bold kept through Replace and Replace all, one-step undo, a table cell, match case on by default), `PptEditorFindTest.kt` (every slide, revealing a match's slide, bold kept, one-step undo), `EpubEditorViewModelTest.kt` (every chapter, replacing in a chapter not on screen, replacing back to the original clearing the edit)
+- **Excel Formula Cells** (`ExcelDocumentTest.kt`): formula cells reported per sheet
+- **PDF Links** (`PdfLinkTest.kt`, `ExternalLinksTest.kt`): which link a tap lands on, and which link schemes are offered to other apps
+- **PDF Text Lines** (`PdfTextLinesTest.kt`): pairing a page's text with its line boxes, dropping blank lines, one block when they disagree
+
+### Results
+- 359 tests across 33 suites, all passed (7s, local Gradle `testDebugUnitTest`); lint clean
+
 ## [0.1.13.0] - 2026-11-01 12:48 IST
 
 ### Added
