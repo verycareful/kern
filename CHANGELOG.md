@@ -17,6 +17,9 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 - **PDF Links**: tapping a link follows it. A link to another page scrolls there; a web, mail or phone link first asks, showing the whole address, and opens only in the app the system picks, so Kern itself still makes no network requests. Android 15 or later; an internal link reaches Kern only when the PDF writes it as a GoTo action
 - `docs/architecture.md`: find and replace, and the PDF text layer behind find, selection and links
 
+### Changed
+- **Markdown Preview Links**: tapping a web, mail or phone link in the preview asks first, showing the whole address, as PDF links do (`src/shared/ui/OpenLinkDialog.kt`)
+
 ### Fixed
 - **Word Replace**: replacing text no longer strips the formatting of the paragraph it is in
 - **Word Find Highlight**: typing in a paragraph while find was open kept the match highlight in that paragraph after find closed; the saved file was not affected

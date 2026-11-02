@@ -1,20 +1,17 @@
 package dev.kern.editors.markdown
 
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color as AndroidColor
-import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -23,9 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.kern.shared.theme.KernColorScheme
+import dev.kern.shared.ui.ExternalLinks
 import dev.kern.shared.ui.FastScrollBox
 import dev.kern.shared.ui.FastScrollMath
 import dev.kern.shared.ui.FastScrollTarget
+import dev.kern.shared.ui.OpenLinkDialog
 import java.io.ByteArrayInputStream
 
 /**
@@ -35,8 +34,8 @@ import java.io.ByteArrayInputStream
  * but it has no file or content access, so it can load only the page Kern hands
  * it and the bundled assets. Requests for anything outside the asset folder get
  * an empty answer here, before reaching the network. Tapping a web, mail or phone
- * link opens it in the app the system picks for it; links inside the page are
- * handled by the page itself. [onScroll] is called as the page scrolls, and the
+ * link asks first, showing the whole address, then opens it in the app the system
+ * picks; links inside the page are handled by the page itself. [onScroll] is called as the page scrolls, and the
  * right edge carries a fast scroll bar in [hue].
  *
  * Find uses the WebView's own search, which is literal and ignores case: [findQuery]
@@ -55,6 +54,8 @@ fun MarkdownPreview(
     onFindResult: (current: Int, total: Int) -> Unit = { _, _ -> },
 ) {
     val currentOnFindResult by rememberUpdatedState(onFindResult)
+    var pendingLink by remember { mutableStateOf<String?>(null) }
+    pendingLink?.let { OpenLinkDialog(it, onDismiss = { pendingLink = null }) }
     val currentOnScroll by rememberUpdatedState(onScroll)
     val theme = remember(colors) { colors.toPreviewTheme() }
     val page = remember(rendered, theme) { MarkdownPage.build(rendered, theme) }
@@ -71,6 +72,7 @@ fun MarkdownPreview(
                         currentOnScroll()
                     }
                     this.onFindResult = { current, total -> currentOnFindResult(current, total) }
+                    onExternalLink = { pendingLink = it }
                 }
             },
             update = { view ->
@@ -100,8 +102,11 @@ private class PreviewWebView(context: Context) : WebView(context) {
         settings.domStorageEnabled = false
         settings.builtInZoomControls = true
         settings.displayZoomControls = false
-        webViewClient = PreviewClient(context)
+        webViewClient = PreviewClient()
     }
+
+    /** Called with a web, mail or phone link the reader tapped; the host confirms before opening it. */
+    var onExternalLink: (String) -> Unit = {}
 
     /** Pixels the page can scroll: its full height less the part on screen. */
     val maxScrollY: Int get() = (computeVerticalScrollRange() - computeVerticalScrollExtent()).coerceAtLeast(0)
@@ -181,11 +186,11 @@ private class WebViewScrollTarget : FastScrollTarget {
     }
 }
 
-private class PreviewClient(private val context: Context) : WebViewClient() {
+private class PreviewClient : WebViewClient() {
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-        val url = request.url
-        if (url.scheme?.lowercase() in EXTERNAL_SCHEMES) openExternally(url)
+        val url = request.url.toString()
+        if (ExternalLinks.isOpenable(url)) (view as? PreviewWebView)?.onExternalLink?.invoke(url)
         return true
     }
 
@@ -200,18 +205,8 @@ private class PreviewClient(private val context: Context) : WebViewClient() {
         return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
     }
 
-    private fun openExternally(url: Uri) {
-        val intent = Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     companion object {
         private const val ASSET_PATH = "/android_asset/preview/"
-        private val EXTERNAL_SCHEMES = setOf("http", "https", "mailto", "tel")
     }
 }
 

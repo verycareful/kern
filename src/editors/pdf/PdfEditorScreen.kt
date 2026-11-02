@@ -55,11 +55,7 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import android.content.ActivityNotFoundException
 import android.content.ClipData
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.gestures.detectTapGestures
 import android.content.ClipboardManager
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -68,6 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import dev.kern.shared.DocumentFormat
 import dev.kern.shared.ui.KernIconButton
+import dev.kern.shared.ui.OpenLinkDialog
 import dev.kern.shared.theme.KernColorScheme
 import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.theme.KernRadius
@@ -474,35 +471,6 @@ private fun Modifier.drawSelection(selection: PdfSelection?, colors: KernColorSc
 private const val SELECTION_ALPHA = 0.35f
 private val SelectionBarBottomPadding = 60.dp
 private const val SELECTION_PREVIEW_CHARS = 40
-
-/**
- * Asks before a PDF link leaves Kern, showing the whole address: a link's visible text
- * can say one thing and point at another.
- */
-@Composable
-private fun OpenLinkDialog(link: String, onDismiss: () -> Unit) {
-    val colors = KernTheme.colors
-    val context = LocalContext.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.surface,
-        title = { Text("Open link?") },
-        text = { Text(link, style = KernType.meta.copy(fontFamily = PlexMonoFamily), color = colors.text) },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onDismiss()
-                    try {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
-                    } catch (_: ActivityNotFoundException) {
-                        Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
-                    }
-                },
-            ) { Text("Open", color = colors.accent) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textMid) } },
-    )
-}
 
 /** The selected text's actions: copy it, or let it go. */
 @Composable

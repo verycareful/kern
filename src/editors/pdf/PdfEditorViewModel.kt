@@ -15,6 +15,7 @@ import dev.kern.shared.find.FindMessage
 import dev.kern.shared.find.FindState
 import dev.kern.shared.find.FindTarget
 import dev.kern.shared.io.DocumentIo
+import dev.kern.shared.ui.ExternalLinks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -112,7 +113,7 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
                 runCatching { layer.links(page) }.getOrDefault(emptyList())
             }.also { linkCache[page] = it }
             when (val link = links.at(point)) {
-                is PdfLink.External -> if (isOpenable(link.uri)) pendingLink = link.uri
+                is PdfLink.External -> if (ExternalLinks.isOpenable(link.uri)) pendingLink = link.uri
                 is PdfLink.GoTo -> if (link.page in 0 until pageCount) linkTargetPage = link.page
                 null -> Unit
             }
@@ -275,12 +276,6 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
         private const val SEARCH_DEBOUNCE_MS = 250L
 
         private val SEARCHING = FindMessage("Searching", isError = false)
-
-        /** The kinds of link handed to other apps, the same ones the Markdown preview opens. */
-        private val OPENABLE_SCHEMES = setOf("http", "https", "mailto", "tel")
-
-        internal fun isOpenable(uri: String): Boolean =
-            uri.substringBefore(':', "").lowercase() in OPENABLE_SCHEMES
 
         /** One 1-based page range: "4" or "2-7", after whitespace has been stripped. */
         private val SINGLE_RANGE = Regex("""(\d{1,6})(?:-(\d{1,6}))?""")
