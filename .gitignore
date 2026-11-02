@@ -36,10 +36,9 @@ changes_version.md
 # session handoffs, and the UI design handoff bundle. Kept local only.
 .internal/
 local/
-# UI design handoff archive dropped at repo root (extracted into .internal/design/).
-/kern.zip
-# Font source archive dropped at repo root (static .ttf extracted into res/font/).
-/IBM_Plex_Mono,Outfit,Quicksand,Sora.zip
+# Archives dropped at the repo root are local material (the UI design handoff,
+# font sources, uploads of local/), never sources. Keep them in local/.
+/*.zip
 
 # Qyra checkout (separate repo / its own git remote). We work on it here and PR
 # from the fork; Kern must not track it.

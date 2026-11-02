@@ -2,7 +2,7 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
-## [0.1.14.0] - 2026-11-02 14:07 IST
+## [0.1.14.0] - 2026-11-02 17:05 IST
 
 ### Added
 - **Find and Replace** (`src/shared/find/`, `src/shared/ui/FindBar.kt`): a magnifier in every editor's top bar, left of Save, opens a find bar under the top bar with the match count, previous and next, a match case toggle (Aa, on by default) and a regex toggle (Regex, off by default). Where the format can be edited, a Replace switch shows a replace field with Replace and Replace all. An empty replace field deletes what it matches, and says so before anything is pressed: the field reads "Empty: matches are deleted", the buttons read Delete and Delete all, and the result says how many were deleted. Every match is highlighted and the current one more strongly; moving between matches scrolls to the current one. With regex off, the find text and the replacement are both taken literally; with regex on, `^` and `$` match at line boundaries and the replacement takes `$1` and `${name}` group references. An invalid pattern or a replacement naming a missing group says so in the bar and changes nothing. Back closes the bar before it leaves the editor
