@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import androidx.annotation.RequiresApi
 import java.io.Closeable
 import java.io.IOException
 import kotlin.math.roundToInt
@@ -28,6 +30,26 @@ class PdfDocument private constructor(
     private val lock = Any()
 
     val pageCount: Int get() = renderer.pageCount
+
+    /** The page text, where the framework renderer can read it (Android 15 and later). */
+    val textLayer: PdfTextLayer? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) FrameworkTextLayer() else null
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    private inner class FrameworkTextLayer : PdfTextLayer {
+        override fun search(page: Int, query: String): List<PdfTextMatch> = synchronized(lock) {
+            renderer.openPage(page).use { p ->
+                val width = p.width.toFloat()
+                val height = p.height.toFloat()
+                p.searchText(query).map { found ->
+                    PdfTextMatch(
+                        page,
+                        found.bounds.map { PageRect(it.left / width, it.top / height, it.right / width, it.bottom / height) },
+                    )
+                }
+            }
+        }
+    }
 
     /**
      * Renders [index] into an ARGB bitmap [targetWidthPx] wide, height following the

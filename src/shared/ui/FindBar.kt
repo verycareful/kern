@@ -84,7 +84,7 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
     val colors = KernTheme.colors
     val count = target.matchCount
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(Unit) { if (target.unavailableReason == null) focus.requestFocus() }
     BackHandler(onBack = find::close)
 
     Column(modifier.fillMaxWidth().background(colors.bg)) {
@@ -99,6 +99,7 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
                     imeAction = ImeAction.Search,
                     onIme = { find.next(count) },
                     modifier = Modifier.weight(1f).focusRequester(focus),
+                    enabled = target.unavailableReason == null,
                 )
                 KernIconButton(KernIcons.ArrowUp, "Previous match", onClick = { find.previous(count) }, enabled = count > 0)
                 KernIconButton(KernIcons.ArrowDown, "Next match", onClick = { find.next(count) }, enabled = count > 0)
@@ -117,8 +118,9 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
                     find.regex = !find.regex
                 }
                 val invalid = if (options) find.compiled as? FindQuery.Invalid else null
-                val note = invalid?.message ?: find.message?.text
-                val noteIsError = invalid != null || find.message?.isError == true
+                val unavailable = target.unavailableReason
+                val note = unavailable ?: invalid?.message ?: find.message?.text
+                val noteIsError = unavailable != null || invalid != null || find.message?.isError == true
                 Text(
                     text = note.orEmpty(),
                     style = KernType.meta,
@@ -174,12 +176,14 @@ private fun FindField(
     modifier: Modifier = Modifier,
     trailing: String = "",
     trailingIsWarning: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val colors = KernTheme.colors
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
+        enabled = enabled,
         textStyle = TextStyle(color = colors.text, fontSize = FIELD_TEXT_SIZE, fontFamily = FontFamily.Monospace),
         cursorBrush = SolidColor(colors.accent),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, autoCorrectEnabled = false),

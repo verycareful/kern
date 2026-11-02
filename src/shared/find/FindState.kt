@@ -128,6 +128,9 @@ interface FindTarget {
      */
     val supportsOptions: Boolean get() = true
 
+    /** Set when this document cannot be searched on this device; the bar shows it and disables the field. */
+    val unavailableReason: String? get() = null
+
     fun replaceCurrent() {}
 
     fun replaceAll() {}

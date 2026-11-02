@@ -50,7 +50,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import dev.kern.shared.DocumentFormat
+import dev.kern.shared.theme.KernColorScheme
+import dev.kern.shared.ui.FindHighlight
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
@@ -103,6 +109,7 @@ fun PdfEditorScreen(
         exportFileName = vm.fileName.ifBlank { "export.pdf" },
         onExportToUri = vm::exportTo,
         toolbar = { PdfToolbar(onOpenTools = { toolsSheetOpen = true }) },
+        find = vm,
     ) { modifier ->
         PdfPager(
             vm = vm,
@@ -144,6 +151,16 @@ private fun PdfPager(
     val listState = rememberLazyListState()
     var containerWidthPx by remember { mutableIntStateOf(0) }
     var goToOpen by remember { mutableStateOf(false) }
+
+    // Scrolls the current match's page into view, then down to the match itself.
+    LaunchedEffect(vm.find.revision) {
+        val match = vm.currentMatch ?: return@LaunchedEffect
+        listState.scrollToItem(match.page)
+        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == match.page } ?: return@LaunchedEffect
+        val top = match.rects.minOfOrNull { it.top } ?: 0f
+        val viewport = listState.layoutInfo.viewportSize.height
+        listState.animateScrollBy(item.size * top - viewport * MATCH_VIEWPORT_FRACTION)
+    }
 
     Box(
         modifier
@@ -375,6 +392,25 @@ private fun ExtractPagesDialog(onDismiss: () -> Unit, onExtract: (String) -> Uni
  * only re-rendered when that width changes, so pinch-zoom just rescales the existing
  * bitmap. When zoomed past 1x the page overflows the viewport and pans horizontally.
  */
+/** Where a revealed match lands, as a fraction of the viewport height from the top. */
+private const val MATCH_VIEWPORT_FRACTION = 0.3f
+
+/** Tints the boxes of [matches] over the page, the [current] one more strongly. */
+private fun Modifier.drawFindMatches(matches: List<PdfTextMatch>, current: PdfTextMatch?, colors: KernColorScheme): Modifier =
+    if (matches.isEmpty()) this else drawWithContent {
+        drawContent()
+        for (match in matches) {
+            val tint = if (match == current) FindHighlight.current(colors) else FindHighlight.match(colors)
+            for (r in match.rects) {
+                drawRect(
+                    tint,
+                    topLeft = Offset(r.left * size.width, r.top * size.height),
+                    size = Size((r.right - r.left) * size.width, (r.bottom - r.top) * size.height),
+                )
+            }
+        }
+    }
+
 @Composable
 private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zoom: Float) {
     val colors = KernTheme.colors
@@ -390,12 +426,15 @@ private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zo
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             contentAlignment = Alignment.TopCenter,
         ) {
+            val matches = vm.pdfMatches.filter { it.page == index }
+            val current = vm.currentMatch
             Image(
                 bitmap = bmp,
                 contentDescription = "Page ${index + 1}",
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .width(widthDp)
+                    .drawFindMatches(if (vm.matchCount == 0) emptyList() else matches, current, colors)
                     .shadow(8.dp, RoundedCornerShape(KernRadius.pdfPage))
                     .clip(RoundedCornerShape(KernRadius.pdfPage))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.pdfPage)),
