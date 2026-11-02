@@ -184,7 +184,5 @@ object WordRichText {
         return if (h.length == 6 && h.all { it.isHex() }) h else null
     }
 
-    // ---- search highlighting -----------------------------------------------
-
     private fun Char.isHex(): Boolean = this in '0'..'9' || this in 'A'..'F'
 }

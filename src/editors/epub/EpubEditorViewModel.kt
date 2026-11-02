@@ -63,7 +63,7 @@ class EpubEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
         if (text == block.text) edits.remove(key) else edits[key] = text
     }
 
-    // ---- Find & Replace -----------------------------------------------------
+    // Find and replace
 
     override val find = FindState()
 

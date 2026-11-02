@@ -68,6 +68,14 @@ Each scroller is adapted to `FastScrollTarget`, which sees it as a fraction of i
 
 Files with pages take a number in `GoToPageDialog` (`src/shared/ui/GoToPageDialog.kt`): tapping the page counter in PDF, the slide counter in PowerPoint or the chapter counter in EPUB opens it. A number outside the document is refused, never clamped.
 
+## Find and replace
+
+Every editor has a magnifier in its top bar, left of Save, that opens the find bar (`src/shared/ui/FindBar.kt`) under the top bar. The bar edits a `FindState` (`src/shared/find/FindState.kt`): the find and replace fields, the match case toggle (on by default) and the regex toggle (off by default), and which match is current. Each editor's ViewModel implements `FindTarget`, searching its own content and doing its own replacing; the bar never sees a document. Editors scroll to a match when `FindState.revision` changes, which happens when the user moves between matches or replaces, not while they type.
+
+The engine (`TextFinder`) is plain Kotlin over `java.util.regex`. With regex off, the find text and the replacement are both literal; with regex on, `^` and `$` match at line boundaries and the replacement takes `$1` and `${name}` group references. Matches that are empty are skipped. A document is searched as segments (a paragraph, a cell, a text box, a chapter block), so a match never runs across two of them. In Word and PowerPoint, replacing inside styled text keeps the style of the first character replaced (`AnnotatedReplace.kt`). Replace all is one undo step where the editor has undo, and changes nothing if any replacement fails. An Excel formula cell is found but never replaced, since writing its text back would turn the formula into plain text.
+
+The Markdown preview and PDF can only find. The preview uses the WebView's own search; PDF uses `PdfTextLayer` (`src/editors/pdf/PdfTextLayer.kt`), which the framework renderer provides from Android 15 and which also serves text selection and links. Both search literally and ignore case, so the toggles are greyed out there.
+
 ## Open source notices
 
 Settings > Notices shows the licence of everything in the app. A build task (`generate<Variant>Notices` in `build.gradle.kts`) writes them into the assets: for each runtime library, the licence and notice files from its jar and the licence its POM names, with `licenses/libraries/` and `licenses/common/` filling in where a jar has none; and for bundled fonts and preview assets, the entries in `licenses/index.tsv`.

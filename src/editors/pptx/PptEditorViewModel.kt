@@ -284,7 +284,7 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
         }
     }
 
-    // ---- Find & Replace -----------------------------------------------------
+    // Find and replace
 
     override val find = FindState()
 

@@ -45,7 +45,7 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
     private var document: PdfDocument? = null
     private var started = false
 
-    // --- Find -------------------------------------------------------------------
+    // Find
 
     override val find = FindState()
 
@@ -63,7 +63,7 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     val currentMatch: PdfTextMatch? get() = if (searchQuery.isEmpty()) null else pdfMatches.getOrNull(find.currentIn(pdfMatches.size))
 
-    // --- Text selection -------------------------------------------------------------
+    // Text selection
 
     /** The text the user has selected by long-pressing and dragging over a page. */
     var selection by mutableStateOf<PdfSelection?>(null)
@@ -85,7 +85,7 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
         selection = null
     }
 
-    // --- Links ----------------------------------------------------------------------
+    // Links
 
     /** A web, mail or phone link the user tapped, waiting for them to confirm opening it. */
     var pendingLink by mutableStateOf<String?>(null)
