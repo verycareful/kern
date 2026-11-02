@@ -12,8 +12,23 @@ data class PagePoint(val x: Float, val y: Float)
 /** One match of a search: the page it is on and the boxes covering its text (one per line it spans). */
 data class PdfTextMatch(val page: Int, val rects: List<PageRect>)
 
-/** Selected text on one page, and the boxes covering it. */
-data class PdfSelection(val page: Int, val text: String, val rects: List<PageRect>)
+/** One line of a page's text and the box it is drawn in. */
+data class PdfTextLine(val text: String, val rect: PageRect)
+
+/**
+ * Pairs a page's text with the line boxes the renderer reports for it. When there is one
+ * box per line they are paired line by line; otherwise the whole text gets one box
+ * covering every line, so it can still be selected, if less exactly.
+ */
+fun pairLines(text: String, boxes: List<PageRect>): List<PdfTextLine> {
+    if (text.isBlank() || boxes.isEmpty()) return emptyList()
+    val lines = text.split('\n')
+    if (lines.size == boxes.size) {
+        return lines.zip(boxes).filter { it.first.isNotBlank() }.map { (line, box) -> PdfTextLine(line, box) }
+    }
+    val union = PageRect(boxes.minOf { it.left }, boxes.minOf { it.top }, boxes.maxOf { it.right }, boxes.maxOf { it.bottom })
+    return listOf(PdfTextLine(text, union))
+}
 
 /** A link on a page: the boxes that take a tap, and where it goes. */
 sealed interface PdfLink {
@@ -40,8 +55,8 @@ interface PdfTextLayer {
     /** Every match of [query] on [page], in reading order. The search is literal and ignores case. */
     fun search(page: Int, query: String): List<PdfTextMatch>
 
-    /** The text between [start] and [end] on [page], in reading order, or null if there is none. */
-    fun select(page: Int, start: PagePoint, end: PagePoint): PdfSelection?
+    /** The text of [page], line by line, with where each line is drawn. */
+    fun lines(page: Int): List<PdfTextLine>
 
     /** Every link on [page]: links out of the document, then links within it. */
     fun links(page: Int): List<PdfLink>

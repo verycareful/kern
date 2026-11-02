@@ -19,7 +19,6 @@ import dev.kern.shared.ui.ExternalLinks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,24 +65,17 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     // Text selection
 
-    /** The text the user has selected by long-pressing and dragging over a page. */
-    var selection by mutableStateOf<PdfSelection?>(null)
-        private set
-
-    /** Whether long-press selection works here: the device has a PDF text layer. */
+    /** Whether page text can be selected here: the device has a PDF text layer. */
     val canSelectText: Boolean get() = textLayer != null
 
-    private data class SelectRequest(val page: Int, val start: PagePoint, val end: PagePoint)
-    private val selectRequests = MutableStateFlow<SelectRequest?>(null)
+    private val lineCache = HashMap<Int, List<PdfTextLine>>()
 
-    /** Selects the text from [start] to [end] on [page]; drags arrive faster than pages are read, so only the latest counts. */
-    fun selectText(page: Int, start: PagePoint, end: PagePoint) {
-        selectRequests.value = SelectRequest(page, start, end)
-    }
-
-    fun clearSelection() {
-        selectRequests.value = null
-        selection = null
+    /** The text lines of [page] for the selectable overlay; empty where there is no text layer. */
+    suspend fun pageLines(page: Int): List<PdfTextLine> {
+        val layer = textLayer ?: return emptyList()
+        lineCache[page]?.let { return it }
+        return withContext(Dispatchers.IO) { runCatching { layer.lines(page) }.getOrDefault(emptyList()) }
+            .also { lineCache[page] = it }
     }
 
     // Links
@@ -99,15 +91,12 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
     private val linkCache = HashMap<Int, List<PdfLink>>()
 
     /**
-     * Handles a tap at [point] on [page]: follows a link there, or clears the selection.
+     * Handles a tap at [point] on [page]: follows a link there, if there is one.
      * A link out of the document is only offered, never opened, until the user confirms.
      */
     fun tapPage(page: Int, point: PagePoint) {
         val layer = textLayer
-        if (selection != null || layer == null) {
-            clearSelection()
-            return
-        }
+        if (layer == null) return
         viewModelScope.launch {
             val links = linkCache[page] ?: withContext(Dispatchers.IO) {
                 runCatching { layer.links(page) }.getOrDefault(emptyList())
@@ -123,19 +112,6 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
     fun dismissLink() { pendingLink = null }
 
     fun consumeLinkTarget() { linkTargetPage = null }
-
-    init {
-        viewModelScope.launch {
-            selectRequests.collectLatest { request ->
-                val layer = textLayer
-                if (request == null || layer == null) return@collectLatest
-                val result = withContext(Dispatchers.IO) {
-                    runCatching { layer.select(request.page, request.start, request.end) }.getOrNull()
-                }
-                if (selectRequests.value == request) selection = result
-            }
-        }
-    }
 
     init {
         // Searches every page off the main thread, a moment after typing stops; a new

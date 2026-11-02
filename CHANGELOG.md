@@ -13,7 +13,7 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
   - PowerPoint: every text box on every slide; moving to a match shows its slide and selects its text box; replacements keep their formatting, and Replace all is one undo step
   - EPUB: every chapter; moving to a match opens its chapter and scrolls to it
   - PDF: find only. Every page is searched a moment after typing stops and matches are boxed over the page; the search ignores case and regex. Needs Android 15 or later, where the system can read a PDF's text; on older Android the bar says so
-- **PDF Text Selection**: long-press and drag over a page to select its text, then Copy it from the bar that appears. Android 15 or later
+- **PDF Text Selection**: long-press a page's text for Android's own text selection: drag the handles, then Copy or Select all from the menu. The page's text is laid invisibly over its picture, line by line, so the selection follows the printed lines. Android 15 or later
 - **PDF Links**: tapping a link follows it. A link to another page scrolls there; a web, mail or phone link first asks, showing the whole address, and opens only in the app the system picks, so Kern itself still makes no network requests. Android 15 or later; an internal link reaches Kern only when the PDF writes it as a GoTo action
 - `docs/architecture.md`: find and replace, and the PDF text layer behind find, selection and links
 
@@ -31,10 +31,11 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 - **Grid Search** (`GridSearchTest.kt`): sheet, row and column order, matches never spanning cells, replace all per cell, locked cells skipped and counted, groups per cell, a bad replacement refused
 - **Editors** (Robolectric): `TextEditorViewModelTest.kt` (source matches, the preview's count, replacing one and all as single undo steps, a bad replacement changing nothing), `ExcelEditorViewModelTest.kt` (every sheet, formula cells refused and skipped, formula cells following inserted rows and columns, a formula cell edited by hand becoming replaceable), `WordEditorViewModelTest.kt` (paragraphs and tables in order, bold kept through Replace and Replace all, one-step undo, a table cell, match case on by default), `PptEditorFindTest.kt` (every slide, revealing a match's slide, bold kept, one-step undo), `EpubEditorViewModelTest.kt` (every chapter, replacing in a chapter not on screen, replacing back to the original clearing the edit)
 - **Excel Formula Cells** (`ExcelDocumentTest.kt`): formula cells reported per sheet
-- **PDF Links** (`PdfLinkTest.kt`): which link a tap lands on, and which link schemes are offered
+- **PDF Links** (`PdfLinkTest.kt`, `ExternalLinksTest.kt`): which link a tap lands on, and which link schemes are offered to other apps
+- **PDF Text Lines** (`PdfTextLinesTest.kt`): pairing a page's text with its line boxes, dropping blank lines, one block when they disagree
 
 ### Results
-- 353 tests across 31 suites, all passed (10s, local Gradle `testDebugUnitTest`); lint clean
+- 359 tests across 33 suites, all passed (7s, local Gradle `testDebugUnitTest`); lint clean
 
 ## [0.1.13.0] - 2026-11-01 12:48 IST
 

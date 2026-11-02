@@ -55,15 +55,21 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import android.content.ClipData
 import androidx.compose.foundation.gestures.detectTapGestures
-import android.content.ClipboardManager
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import dev.kern.shared.DocumentFormat
-import dev.kern.shared.ui.KernIconButton
 import dev.kern.shared.ui.OpenLinkDialog
 import dev.kern.shared.theme.KernColorScheme
 import dev.kern.shared.ui.FindHighlight
@@ -229,14 +235,6 @@ private fun PdfPager(
             ) {
                 Text("${(zoom.scale * 100).roundToInt()}%", style = KernType.meta, color = hue)
             }
-        }
-
-        vm.selection?.let { selected ->
-            SelectionBar(
-                text = selected.text,
-                onClose = vm::clearSelection,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = SelectionBarBottomPadding),
-            )
         }
 
         PdfToolsLayer(vm, toolsSheetOpen, onToolsSheetOpenChange)
@@ -438,75 +436,64 @@ private fun Modifier.drawFindMatches(matches: List<PdfTextMatch>, current: PdfTe
         }
     }
 
-/** Long-press then drag over a page selects its text, where the device can read PDF text. */
-private fun Modifier.selectTextOnLongPress(vm: PdfEditorViewModel, page: Int): Modifier =
-    if (!vm.canSelectText) this else pointerInput(page) {
-        var start = Offset.Zero
-        fun Offset.onPage() = PagePoint(x / size.width, y / size.height)
-        detectDragGesturesAfterLongPress(
-            onDragStart = {
-                start = it
-                vm.selectText(page, it.onPage(), it.onPage())
-            },
-            onDrag = { change, _ ->
-                change.consume()
-                vm.selectText(page, start.onPage(), change.position.onPage())
-            },
-        )
+/**
+ * The page's text laid invisibly over its picture, line by line, inside a selection
+ * container, so a long press gives Android's own text selection: handles, magnifier, and
+ * the Copy and Select all menu. Each line is stretched to the box the renderer reports
+ * for it, so the selection lines up with the printed text.
+ */
+@Composable
+private fun PdfTextOverlay(lines: List<PdfTextLine>, modifier: Modifier = Modifier) {
+    if (lines.isEmpty()) return
+    val colors = KernTheme.colors
+    val measurer = rememberTextMeasurer()
+    val selectionColors = remember(colors) {
+        TextSelectionColors(handleColor = colors.accent, backgroundColor = colors.accent.copy(alpha = SELECTION_ALPHA))
     }
-
-private fun Modifier.drawSelection(selection: PdfSelection?, colors: KernColorScheme): Modifier =
-    if (selection == null) this else drawWithContent {
-        drawContent()
-        val tint = colors.accent.copy(alpha = SELECTION_ALPHA)
-        for (r in selection.rects) {
-            drawRect(
-                tint,
-                topLeft = Offset(r.left * size.width, r.top * size.height),
-                size = Size((r.right - r.left) * size.width, (r.bottom - r.top) * size.height),
-            )
+    BoxWithConstraints(modifier) {
+        val pageWidth = constraints.maxWidth.toFloat()
+        val pageHeight = constraints.maxHeight.toFloat()
+        CompositionLocalProvider(LocalTextSelectionColors provides selectionColors) {
+            SelectionContainer {
+                Box(Modifier.fillMaxSize()) {
+                    for (line in lines) {
+                        if (line.rect.right > line.rect.left && line.rect.bottom > line.rect.top) {
+                            key(line) { OverlayLine(line, pageWidth, pageHeight, measurer) }
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+/** One invisible line of page text, scaled to fill the box it is printed in. */
+@Composable
+private fun OverlayLine(line: PdfTextLine, pageWidth: Float, pageHeight: Float, measurer: TextMeasurer) {
+    val r = line.rect
+    val boxWidth = (r.right - r.left) * pageWidth
+    val boxHeight = (r.bottom - r.top) * pageHeight
+    val style = TextStyle(color = Color.Transparent, fontSize = with(LocalDensity.current) { boxHeight.toSp() })
+    val measured = remember(line.text, style) { measurer.measure(line.text, style, softWrap = false, maxLines = 1).size }
+    BasicText(
+        text = line.text,
+        style = style,
+        softWrap = false,
+        maxLines = 1,
+        modifier = Modifier.layout { measurable, c ->
+            val placeable = measurable.measure(c.copy(maxWidth = Constraints.Infinity, maxHeight = Constraints.Infinity))
+            layout(placeable.width, placeable.height) {
+                placeable.placeWithLayer((r.left * pageWidth).roundToInt(), (r.top * pageHeight).roundToInt()) {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = boxWidth / measured.width.coerceAtLeast(1)
+                    scaleY = boxHeight / measured.height.coerceAtLeast(1)
+                }
+            }
+        },
+    )
+}
 
 private const val SELECTION_ALPHA = 0.35f
-private val SelectionBarBottomPadding = 60.dp
-private const val SELECTION_PREVIEW_CHARS = 40
-
-/** The selected text's actions: copy it, or let it go. */
-@Composable
-private fun SelectionBar(text: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = KernTheme.colors
-    val context = LocalContext.current
-    Row(
-        modifier = modifier
-            .padding(horizontal = 16.dp)
-            .shadow(6.dp, RoundedCornerShape(KernRadius.field))
-            .clip(RoundedCornerShape(KernRadius.field))
-            .background(colors.surface)
-            .padding(start = 14.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text.replace('\n', ' ').take(SELECTION_PREVIEW_CHARS),
-            style = KernType.meta,
-            color = colors.textMid,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        ToolbarButton(
-            KernIcons.Copy,
-            "Copy selected text",
-            onClick = {
-                context.getSystemService(ClipboardManager::class.java)
-                    ?.setPrimaryClip(ClipData.newPlainText("PDF text", text))
-                onClose()
-            },
-            label = "Copy",
-        )
-        KernIconButton(KernIcons.Close, "Clear selection", onClick = onClose)
-    }
-}
 
 @Composable
 private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zoom: Float) {
@@ -525,23 +512,28 @@ private fun PdfPageView(vm: PdfEditorViewModel, index: Int, baseWidthPx: Int, zo
         ) {
             val matches = vm.pdfMatches.filter { it.page == index }
             val current = vm.currentMatch
-            val selected = vm.selection?.takeIf { it.page == index }
+            var lines by remember(index) { mutableStateOf<List<PdfTextLine>>(emptyList()) }
+            LaunchedEffect(index) { lines = vm.pageLines(index) }
+            Box(
+                Modifier
+                    .width(widthDp)
+                    .pointerInput(index) {
+                        detectTapGestures { vm.tapPage(index, PagePoint(it.x / size.width, it.y / size.height)) }
+                    },
+            ) {
             Image(
                 bitmap = bmp,
                 contentDescription = "Page ${index + 1}",
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
-                    .width(widthDp)
+                    .fillMaxWidth()
                     .drawFindMatches(if (vm.matchCount == 0) emptyList() else matches, current, colors)
-                    .drawSelection(selected, colors)
-                    .selectTextOnLongPress(vm, index)
-                    .pointerInput(index) {
-                        detectTapGestures { vm.tapPage(index, PagePoint(it.x / size.width, it.y / size.height)) }
-                    }
                     .shadow(8.dp, RoundedCornerShape(KernRadius.pdfPage))
                     .clip(RoundedCornerShape(KernRadius.pdfPage))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(KernRadius.pdfPage)),
             )
+            PdfTextOverlay(lines, Modifier.matchParentSize())
+            }
         }
     } else {
         // Placeholder sized to a portrait page (A4 ratio) so the list does not jump.

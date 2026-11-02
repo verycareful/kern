@@ -3,7 +3,6 @@ package dev.kern.editors.pdf
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.Point
 import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
 import android.graphics.pdf.models.selection.SelectionBoundary
@@ -48,15 +47,15 @@ class PdfDocument private constructor(
             }
         }
 
-        override fun select(page: Int, start: PagePoint, end: PagePoint): PdfSelection? = synchronized(lock) {
+        override fun lines(page: Int): List<PdfTextLine> = synchronized(lock) {
             renderer.openPage(page).use { p ->
                 val width = p.width.toFloat()
                 val height = p.height.toFloat()
-                fun boundary(at: PagePoint) = SelectionBoundary(Point((at.x * width).roundToInt(), (at.y * height).roundToInt()))
-                val contents = p.selectContent(boundary(start), boundary(end))?.selectedTextContents.orEmpty()
-                val text = contents.joinToString("") { it.text }
-                if (text.isBlank()) null
-                else PdfSelection(page, text, contents.flatMap { c -> c.bounds.map { it.toPageRect(width, height) } })
+                // Selecting the whole page by character index gives one box per line.
+                val text = p.textContents.joinToString("") { it.text }
+                if (text.isEmpty()) return@use emptyList()
+                val contents = p.selectContent(SelectionBoundary(0), SelectionBoundary(text.length))?.selectedTextContents.orEmpty()
+                pairLines(contents.joinToString("") { it.text }, contents.flatMap { c -> c.bounds.map { it.toPageRect(width, height) } })
             }
         }
 
