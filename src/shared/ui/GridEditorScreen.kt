@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import dev.kern.shared.CellMerge
+import dev.kern.shared.find.FindTarget
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
@@ -149,6 +150,7 @@ fun GridEditorScreen(
     onResizeRow: (Int, Float) -> Unit = { _, _ -> },
     onAutoResizeColumn: (Int) -> Unit = {},
     onAutoResizeRow: (Int) -> Unit = {},
+    find: FindTarget? = null,
 ) {
     UnsavedChangesGuard(dirty)
     val snackbar = remember { SnackbarHostState() }
@@ -172,6 +174,7 @@ fun GridEditorScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = KernTheme.colors.bg,
         topBar = {
+            Column {
             KernTopBar(
                 title = title,
                 monoTitle = true,
@@ -180,6 +183,7 @@ fun GridEditorScreen(
                 subtitleColor = if (dirty) KernTheme.colors.accent else null,
                 onBack = { backDispatcher?.onBackPressed() },
                 actions = {
+                    find?.let { FindButton(it) }
                     KernIconButton(
                         KernIcons.Save,
                         "Save",
@@ -195,6 +199,8 @@ fun GridEditorScreen(
                     KernIconButton(KernIcons.Download, "Export a copy", onClick = { exportLauncher.launch(exportFileName) })
                 },
             )
+            find?.let { FindBar(it) }
+            }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {

@@ -5,6 +5,7 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import dev.kern.shared.find.FindTarget
 import dev.kern.shared.theme.KernTheme
 import kotlinx.coroutines.launch
 
@@ -36,6 +38,8 @@ import kotlinx.coroutines.launch
  *
  * @param hue the file-format identity colour (title square, save-state).
  * @param toolbar optional bottom toolbar (e.g. an [EditorToolbar]).
+ * @param find the editor's side of find and replace: adds the magnifier left of Save and
+ *        the [FindBar] under the top bar.
  * @param content rendered only once loaded; receives a Modifier carrying the
  *        scaffold inset padding to use as its root.
  */
@@ -52,6 +56,7 @@ fun EditorChrome(
     exportFileName: String,
     onExportToUri: (Uri, onResult: (Boolean, String?) -> Unit) -> Unit,
     toolbar: (@Composable () -> Unit)? = null,
+    find: FindTarget? = null,
     extraActions: (@Composable () -> Unit)? = null,
     content: @Composable (Modifier) -> Unit,
 ) {
@@ -77,6 +82,7 @@ fun EditorChrome(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = colors.bg,
         topBar = {
+            Column {
             KernTopBar(
                 title = title,
                 monoTitle = true,
@@ -86,6 +92,7 @@ fun EditorChrome(
                 onBack = { backDispatcher?.onBackPressed() },
                 actions = {
                     extraActions?.invoke()
+                    find?.let { FindButton(it) }
                     KernIconButton(
                         KernIcons.Save,
                         "Save",
@@ -101,6 +108,8 @@ fun EditorChrome(
                     KernIconButton(KernIcons.Download, "Export a copy", onClick = { exportLauncher.launch(exportFileName) })
                 },
             )
+            find?.let { FindBar(it) }
+            }
         },
         bottomBar = { toolbar?.invoke() },
     ) { padding ->
