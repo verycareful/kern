@@ -2,6 +2,7 @@ package dev.kern.editors.pptx
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -9,10 +10,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.kern.shared.find.FindMessages
+import dev.kern.shared.find.FindState
+import dev.kern.shared.find.FindTarget
+import dev.kern.shared.find.SegmentMatch
+import dev.kern.shared.find.findIn
+import dev.kern.shared.find.replaceAll
+import dev.kern.shared.find.replaceAt
 import dev.kern.shared.io.DocumentIo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,7 +54,7 @@ private fun fallbackBounds(index: Int) = PptDocument.ShapeBounds(
     height = 50f,
 )
 
-class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
+class PptEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
 
     /**
      * One text shape on a slide.
@@ -273,6 +282,71 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app) {
                 loading = false
             }
         }
+    }
+
+    // ---- Find & Replace -----------------------------------------------------
+
+    override val find = FindState()
+
+    /** A text shape: [shape] on slide [slide]. */
+    data class ShapeSpot(val slide: Int, val shape: Int)
+
+    val matches: List<SegmentMatch<ShapeSpot>> by derivedStateOf {
+        val finder = find.activeFinder ?: return@derivedStateOf emptyList()
+        finder.findIn(
+            slideStates.asSequence().flatMapIndexed { s, slide ->
+                slide.shapes.asSequence().mapIndexed { i, shape -> ShapeSpot(s, i) to shape.textValue.text }
+            },
+        )
+    }
+
+    override val matchCount: Int get() = matches.size
+    override val canReplace: Boolean get() = true
+
+    val currentMatch: SegmentMatch<ShapeSpot>? get() = matches.getOrNull(find.currentIn(matches.size))
+
+    /** Shows the slide holding the current match and selects its shape. */
+    fun revealCurrentMatch() {
+        val spot = currentMatch?.key ?: return
+        if (spot.slide != currentSlide) goToSlide(spot.slide)
+        selectShape(spot.shape)
+    }
+
+    /** Replaces the current match as one undo step, keeping the formatting of what it replaces. */
+    override fun replaceCurrent() {
+        val finder = find.finder ?: return
+        val match = currentMatch ?: return
+        val shape = slideStates.getOrNull(match.key.slide)?.shapes?.getOrNull(match.key.shape) ?: return
+        finder.replaceAt(shape.textValue.annotatedString, match.match, find.replacement)
+            .onSuccess {
+                pushHistory()
+                setShapeText(shape, it)
+                find.message = null
+                find.reveal()
+            }
+            .onFailure { find.message = FindMessages.failed(it) }
+    }
+
+    /** Replaces every match on every slide as one undo step; nothing changes if any replacement fails. */
+    override fun replaceAll() {
+        val finder = find.finder ?: return
+        val outcome = runCatching {
+            slideStates.flatMap { it.shapes }
+                .filter { finder.count(it.textValue.text) > 0 }
+                .map { it to finder.replaceAll(it.textValue.annotatedString, find.replacement).getOrThrow() }
+        }
+        val changes = outcome.getOrElse { find.message = FindMessages.failed(it); return }
+        if (changes.isNotEmpty()) {
+            pushHistory()
+            for ((shape, result) in changes) setShapeText(shape, result.value)
+        }
+        find.message = FindMessages.replaced(changes.sumOf { it.second.count })
+    }
+
+    private fun setShapeText(shape: ShapeState, text: AnnotatedString) {
+        val caret = shape.textValue.selection.start.coerceAtMost(text.length)
+        shape.textValue = shape.textValue.copy(annotatedString = text, selection = TextRange(caret))
+        dirty = true
     }
 
     fun goToSlide(index: Int) {
