@@ -1,6 +1,7 @@
 package dev.kern.editors.excel
 
 import dev.kern.shared.CellMerge
+import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayInputStream
@@ -17,13 +18,18 @@ import java.io.ByteArrayOutputStream
  */
 object ExcelDocument {
 
-    /** A parsed workbook: sheet names, one display grid per sheet, and merged regions per sheet. */
+    /**
+     * A parsed workbook: sheet names, one display grid per sheet, merged regions per
+     * sheet, and per sheet the (row, column) of every formula cell. Writing a formula
+     * cell's grid text back would turn the formula into plain text.
+     */
     data class Parsed(
         val sheetNames: List<String>,
         val sheets: List<List<List<String>>>,
         val mergedRegions: List<List<CellMerge>>,
         val colWidths: List<Map<Int, Float>> = emptyList(),
         val rowHeights: List<Map<Int, Float>> = emptyList(),
+        val formulaCells: List<Set<Pair<Int, Int>>> = emptyList(),
     )
 
     /**
@@ -43,6 +49,7 @@ object ExcelDocument {
             val allMerges = ArrayList<List<CellMerge>>(wb.numberOfSheets)
             val allColWidths = ArrayList<Map<Int, Float>>(wb.numberOfSheets)
             val allRowHeights = ArrayList<Map<Int, Float>>(wb.numberOfSheets)
+            val allFormulas = ArrayList<Set<Pair<Int, Int>>>(wb.numberOfSheets)
             for (s in 0 until wb.numberOfSheets) {
                 val sheet = wb.getSheetAt(s)
                 names.add(sheet.sheetName)
@@ -52,6 +59,7 @@ object ExcelDocument {
                     allMerges.add(emptyList())
                     allColWidths.add(emptyMap())
                     allRowHeights.add(emptyMap())
+                    allFormulas.add(emptySet())
                     continue
                 }
                 var width = 1
@@ -84,9 +92,12 @@ object ExcelDocument {
                 })
                 allColWidths.add(cWidths)
                 allRowHeights.add(rHeights)
+                allFormulas.add(
+                    sheet.flatMap { row -> row.filter { it.cellType == CellType.FORMULA }.map { it.rowIndex to it.columnIndex } }.toSet(),
+                )
             }
             if (names.isEmpty()) return Parsed(listOf("Sheet1"), listOf(listOf(listOf(""))), listOf(emptyList()), listOf(emptyMap()), listOf(emptyMap()))
-            return Parsed(names, grids, allMerges, allColWidths, allRowHeights)
+            return Parsed(names, grids, allMerges, allColWidths, allRowHeights, allFormulas)
         }
     }
 

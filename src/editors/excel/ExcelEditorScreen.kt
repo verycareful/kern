@@ -44,5 +44,6 @@ fun ExcelEditorScreen(
         onResizeRow = vm::resizeRow,
         onAutoResizeColumn = vm::autoResizeColumn,
         onAutoResizeRow = vm::autoResizeRow,
+        find = vm,
     )
 }

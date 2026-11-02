@@ -2,6 +2,7 @@ package dev.kern.editors.csv
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -12,6 +13,13 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.kern.shared.find.CellRef
+import dev.kern.shared.find.FindMark
+import dev.kern.shared.find.FindMessages
+import dev.kern.shared.find.FindState
+import dev.kern.shared.find.GridFindTarget
+import dev.kern.shared.find.GridSearch
+import dev.kern.shared.find.SegmentMatch
 import dev.kern.shared.io.DocumentIo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,9 +29,54 @@ import kotlinx.coroutines.withContext
  * Holds the editable CSV grid and drives load/save/export. File I/O runs off the
  * main thread; the grid is Compose snapshot state so cell edits recompose directly.
  */
-class CsvEditorViewModel(app: Application) : AndroidViewModel(app) {
+class CsvEditorViewModel(app: Application) : AndroidViewModel(app), GridFindTarget {
 
     val rows = mutableStateListOf<SnapshotStateList<String>>()
+
+    override val find = FindState()
+
+    private val matches: List<SegmentMatch<CellRef>> by derivedStateOf {
+        find.activeFinder?.let { GridSearch.matches(it, listOf(rows)) } ?: emptyList()
+    }
+    private val matchedCells: Set<CellRef> by derivedStateOf { matches.mapTo(HashSet()) { it.key } }
+
+    override val matchCount: Int get() = matches.size
+    override val canReplace: Boolean get() = true
+    override val currentCell: CellRef? get() = matches.getOrNull(find.currentIn(matches.size))?.key
+
+    override fun cellMark(sheet: Int, row: Int, col: Int): FindMark {
+        val ref = CellRef(sheet, row, col)
+        return when {
+            ref == currentCell -> FindMark.CURRENT
+            ref in matchedCells -> FindMark.MATCH
+            else -> FindMark.NONE
+        }
+    }
+
+    override fun replaceCurrent() {
+        val finder = find.finder ?: return
+        val match = matches.getOrNull(find.currentIn(matches.size)) ?: return
+        val row = rows.getOrNull(match.key.row) ?: return
+        finder.replaceAt(row[match.key.col], match.match, find.replacement)
+            .onSuccess {
+                row[match.key.col] = it
+                dirty = true
+                find.message = null
+                find.reveal()
+            }
+            .onFailure { find.message = FindMessages.failed(it) }
+    }
+
+    override fun replaceAll() {
+        val finder = find.finder ?: return
+        GridSearch.replaceAll(finder, listOf(rows), find.replacement)
+            .onSuccess { result ->
+                for ((ref, value) in result.values) rows[ref.row][ref.col] = value
+                if (result.values.isNotEmpty()) dirty = true
+                find.message = GridSearch.replacedMessage(result)
+            }
+            .onFailure { find.message = FindMessages.failed(it) }
+    }
 
     var fileName by mutableStateOf("")
         private set

@@ -31,6 +31,19 @@ class ExcelDocumentTest {
     }
 
     @Test
+    fun read_listsFormulaCellsPerSheet() {
+        val out = ByteArrayOutputStream()
+        XSSFWorkbook().use { wb ->
+            val sheet = wb.createSheet("Sums")
+            sheet.createRow(0).also { it.createCell(0).setCellValue(2.0); it.createCell(1).cellFormula = "A1*2" }
+            wb.createSheet("Plain").createRow(0).createCell(0).setCellValue("x")
+            wb.write(out)
+        }
+        val parsed = ExcelDocument.read(out.toByteArray())
+        assertEquals(listOf(setOf(0 to 1), emptySet<Pair<Int, Int>>()), parsed.formulaCells)
+    }
+
+    @Test
     fun applyEdits_changesTargetCellAndPreservesOthers() {
         val edited = ExcelDocument.applyEditsAndSerialize(
             sampleWorkbook(),
