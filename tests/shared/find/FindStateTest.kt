@@ -100,6 +100,21 @@ class FindStateTest {
     }
 
     @Test
+    fun revision_bumpsOnEveryMoveButNotOnReplacementText() {
+        val find = FindState()
+        var last = find.revision
+        fun bumped(): Boolean = (find.revision != last).also { last = find.revision }
+        find.open(); assertTrue(bumped())
+        find.query = "a"; assertTrue(bumped())
+        find.next(3); assertTrue(bumped())
+        find.previous(3); assertTrue(bumped())
+        find.select(1); assertTrue(bumped())
+        find.reveal(); assertTrue(bumped())
+        find.replacement = "b"; assertFalse(bumped())
+        find.close(); assertFalse(bumped())
+    }
+
+    @Test
     fun messages_readNaturally() {
         assertEquals(FindMessage("Replaced 1 match", isError = false), FindMessages.replaced(1))
         assertEquals(FindMessage("Replaced 4 matches", isError = false), FindMessages.replaced(4))

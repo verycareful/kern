@@ -45,6 +45,14 @@ class FindState {
     var current by mutableIntStateOf(0)
         private set
 
+    /**
+     * Bumped whenever the current match should be brought into view: stepping, a new
+     * query, or a replace. Editors key their scrolling on it rather than on the match
+     * list, so typing in the document does not jump back to a match.
+     */
+    var revision by mutableIntStateOf(0)
+        private set
+
     /** A one-line note for the bar: a failed replacement, or how many were replaced. */
     var message by mutableStateOf<FindMessage?>(null)
 
@@ -56,7 +64,13 @@ class FindState {
     /** Highlights and the match count apply only while the bar is open with a usable query. */
     val activeFinder: TextFinder? get() = if (isOpen) finder else null
 
-    fun open() { isOpen = true }
+    fun open() {
+        isOpen = true
+        reveal()
+    }
+
+    /** Asks the editor to bring the current match into view again. */
+    fun reveal() { revision++ }
 
     /** Hides the bar. The fields keep their text for the next time it opens. */
     fun close() {
@@ -68,14 +82,19 @@ class FindState {
 
     fun next(count: Int) {
         if (count > 0) current = (current.coerceIn(0, count - 1) + 1) % count
+        reveal()
     }
 
     fun previous(count: Int) {
         if (count > 0) current = (current.coerceIn(0, count - 1) - 1 + count) % count
+        reveal()
     }
 
     /** Makes match [index] current, for example the match nearest the caret. */
-    fun select(index: Int) { current = index.coerceAtLeast(0) }
+    fun select(index: Int) {
+        current = index.coerceAtLeast(0)
+        reveal()
+    }
 
     /** [current] clamped to [count] matches; a replace can shrink the list under it. */
     fun currentIn(count: Int): Int = if (count == 0) 0 else current.coerceIn(0, count - 1)
@@ -83,6 +102,7 @@ class FindState {
     private fun restart() {
         current = 0
         message = null
+        reveal()
     }
 }
 

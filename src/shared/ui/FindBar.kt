@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -39,11 +40,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kern.shared.find.FindQuery
 import dev.kern.shared.find.FindTarget
+import dev.kern.shared.theme.KernColorScheme
 import dev.kern.shared.theme.KernRadius
 import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 
 private val FIELD_TEXT_SIZE = 14.sp
+private const val MATCH_ALPHA = 0.28f
+private const val CURRENT_MATCH_ALPHA = 0.7f
+
+/** How editors paint matches: every match lightly, the current one strongly. */
+object FindHighlight {
+    fun match(colors: KernColorScheme): Color = colors.accent.copy(alpha = MATCH_ALPHA)
+    fun current(colors: KernColorScheme): Color = colors.accent.copy(alpha = CURRENT_MATCH_ALPHA)
+    fun matchStyle(colors: KernColorScheme) = SpanStyle(background = match(colors))
+    fun currentStyle(colors: KernColorScheme) = SpanStyle(background = current(colors))
+}
 private val OPTION_CHIP_HEIGHT = 30.dp
 private val OPTION_CHIP_MIN_WIDTH = 40.dp
 

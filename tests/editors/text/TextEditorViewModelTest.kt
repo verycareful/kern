@@ -145,6 +145,71 @@ class TextEditorViewModelTest {
         assertFalse(TextEditorViewModel.isMarkdown(DocumentFormat.TEXT, "no-extension"))
     }
 
+    private fun openForFind(text: String): TextEditorViewModel =
+        open("find.txt", text.toByteArray(), DocumentFormat.TEXT).first.also { it.find.open() }
+
+    @Test
+    fun find_listsSourceMatchesOnlyWhileOpen() {
+        val vm = openForFind("cat Cat cat")
+        vm.find.query = "cat"
+        assertEquals(2, vm.matchCount)
+        vm.find.matchCase = false
+        assertEquals(3, vm.matchCount)
+        vm.find.close()
+        assertEquals(0, vm.matchCount)
+    }
+
+    @Test
+    fun find_markdownPreviewCannotReplaceAndGreysTheToggles() {
+        val (vm, _) = open("doc.md", "cat".toByteArray(), DocumentFormat.MARKDOWN)
+        assertFalse(vm.canReplace)
+        assertFalse(vm.supportsOptions)
+        vm.showEditor()
+        assertTrue(vm.canReplace)
+        assertTrue(vm.supportsOptions)
+    }
+
+    @Test
+    fun replaceCurrent_replacesOneMatchAsOneUndoStep() {
+        val vm = openForFind("cat cat cat")
+        vm.find.query = "cat"
+        vm.find.replacement = "dog"
+        vm.find.next(vm.matchCount)
+        vm.replaceCurrent()
+        assertEquals("cat dog cat", vm.state.text.toString())
+        assertTrue(vm.dirty)
+        assertEquals(2, vm.matchCount)
+        vm.undo()
+        assertEquals("cat cat cat", vm.state.text.toString())
+        assertFalse(vm.dirty)
+    }
+
+    @Test
+    fun replaceAll_replacesEveryMatchAsOneUndoStepAndReportsTheCount() {
+        val vm = openForFind("a1 b22 c333")
+        vm.find.regex = true
+        vm.find.query = "([a-z])(\\d+)"
+        vm.find.replacement = "\$2\$1"
+        vm.replaceAll()
+        assertEquals("1a 22b 333c", vm.state.text.toString())
+        assertEquals("Replaced 3 matches", vm.find.message?.text)
+        vm.undo()
+        assertEquals("a1 b22 c333", vm.state.text.toString())
+    }
+
+    @Test
+    fun badReplacement_changesNothingAndShowsTheError() {
+        val vm = openForFind("ab ab")
+        vm.find.regex = true
+        vm.find.query = "(a)b"
+        vm.find.replacement = "\$5"
+        vm.replaceAll()
+        assertEquals("ab ab", vm.state.text.toString())
+        assertTrue(vm.find.message!!.isError)
+        vm.replaceCurrent()
+        assertEquals("ab ab", vm.state.text.toString())
+    }
+
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val POLL_MS = 5L
