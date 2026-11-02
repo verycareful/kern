@@ -38,6 +38,10 @@ import java.io.ByteArrayInputStream
  * link opens it in the app the system picks for it; links inside the page are
  * handled by the page itself. [onScroll] is called as the page scrolls, and the
  * right edge carries a fast scroll bar in [hue].
+ *
+ * Find uses the WebView's own search, which is literal and ignores case: [findQuery]
+ * is searched (empty clears it), [findCurrent] is the match to show, and
+ * [onFindResult] receives the current match and the total as the WebView counts them.
  */
 @Composable
 fun MarkdownPreview(
@@ -46,7 +50,11 @@ fun MarkdownPreview(
     hue: Color,
     modifier: Modifier = Modifier,
     onScroll: () -> Unit = {},
+    findQuery: String = "",
+    findCurrent: Int = 0,
+    onFindResult: (current: Int, total: Int) -> Unit = { _, _ -> },
 ) {
+    val currentOnFindResult by rememberUpdatedState(onFindResult)
     val currentOnScroll by rememberUpdatedState(onScroll)
     val theme = remember(colors) { colors.toPreviewTheme() }
     val page = remember(rendered, theme) { MarkdownPage.build(rendered, theme) }
@@ -62,6 +70,7 @@ fun MarkdownPreview(
                         scrollTarget.scrollY = scrollY
                         currentOnScroll()
                     }
+                    this.onFindResult = { current, total -> currentOnFindResult(current, total) }
                 }
             },
             update = { view ->
@@ -70,6 +79,7 @@ fun MarkdownPreview(
                     view.tag = page
                     view.loadDataWithBaseURL(MarkdownPage.BASE_URL, page, "text/html", "utf-8", null)
                 }
+                view.find(findQuery, findCurrent)
             },
             onRelease = {
                 scrollTarget.view = null
@@ -97,6 +107,48 @@ private class PreviewWebView(context: Context) : WebView(context) {
     val maxScrollY: Int get() = (computeVerticalScrollRange() - computeVerticalScrollExtent()).coerceAtLeast(0)
 
     val viewportHeight: Int get() = computeVerticalScrollExtent()
+
+    var onFindResult: (current: Int, total: Int) -> Unit = { _, _ -> }
+    private var query = ""
+    private var active = 0
+    private var total = 0
+
+    init {
+        setFindListener { activeOrdinal, matches, _ ->
+            active = activeOrdinal
+            total = matches
+            onFindResult(activeOrdinal, matches)
+        }
+    }
+
+    /**
+     * Searches for [newQuery] and steps to match [current]. The WebView keeps its own
+     * current match, so stepping walks it one match at a time in the shorter direction.
+     */
+    fun find(newQuery: String, current: Int) {
+        if (newQuery != query) {
+            query = newQuery
+            active = 0
+            total = 0
+            if (newQuery.isEmpty()) {
+                clearMatches()
+                onFindResult(0, 0)
+            } else {
+                findAllAsync(newQuery)
+            }
+            return
+        }
+        if (total == 0 || current == active) return
+        val forwardSteps = Math.floorMod(current - active, total)
+        if (forwardSteps <= total - forwardSteps) repeat(forwardSteps) { findNext(true) }
+        else repeat(total - forwardSteps) { findNext(false) }
+        active = current
+    }
+
+    /** A reloaded page has lost its matches; search it again once it has loaded. */
+    fun refind() {
+        if (query.isNotEmpty()) findAllAsync(query)
+    }
 }
 
 /**
@@ -135,6 +187,10 @@ private class PreviewClient(private val context: Context) : WebViewClient() {
         val url = request.url
         if (url.scheme?.lowercase() in EXTERNAL_SCHEMES) openExternally(url)
         return true
+    }
+
+    override fun onPageFinished(view: WebView, url: String?) {
+        (view as? PreviewWebView)?.refind()
     }
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {

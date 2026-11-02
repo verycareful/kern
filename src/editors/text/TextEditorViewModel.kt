@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
@@ -64,7 +65,22 @@ class TextEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
         if (finder == null || mode != Mode.EDIT) emptyList() else finder.findAll(state.text)
     }
 
-    override val matchCount: Int get() = if (mode == Mode.EDIT) sourceMatches.size else 0
+    /** Matches the preview's WebView reports; it searches literally and ignores case. */
+    var previewMatchCount by mutableIntStateOf(0)
+        private set
+
+    /** What the preview searches for: the find text while the bar is open, else nothing. */
+    val previewQuery: String get() = if (find.isOpen) find.query else ""
+
+    fun onPreviewFindResult(total: Int) {
+        previewMatchCount = total
+    }
+
+    override val matchCount: Int get() = when {
+        mode == Mode.EDIT -> sourceMatches.size
+        previewQuery.isEmpty() -> 0
+        else -> previewMatchCount
+    }
     override val canReplace: Boolean get() = mode == Mode.EDIT
     override val supportsOptions: Boolean get() = mode == Mode.EDIT
 

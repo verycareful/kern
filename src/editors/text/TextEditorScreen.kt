@@ -192,7 +192,16 @@ private fun PreviewPane(vm: TextEditorViewModel, hue: Color, onScroll: () -> Uni
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = KernTheme.colors.accent)
         }
     } else {
-        MarkdownPreview(rendered, KernTheme.colors, hue, Modifier.fillMaxSize(), onScroll = onScroll)
+        MarkdownPreview(
+            rendered,
+            KernTheme.colors,
+            hue,
+            Modifier.fillMaxSize(),
+            onScroll = onScroll,
+            findQuery = vm.previewQuery,
+            findCurrent = vm.find.currentIn(vm.matchCount),
+            onFindResult = { _, total -> vm.onPreviewFindResult(total) },
+        )
     }
 }
 

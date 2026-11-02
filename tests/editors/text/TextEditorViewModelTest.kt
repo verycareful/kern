@@ -170,6 +170,19 @@ class TextEditorViewModelTest {
     }
 
     @Test
+    fun preview_countsWhatTheWebViewReportsWhileTheBarHasAQuery() {
+        val (vm, _) = open("doc.md", "cat".toByteArray(), DocumentFormat.MARKDOWN)
+        vm.find.query = "cat"
+        assertEquals("", vm.previewQuery)
+        vm.find.open()
+        assertEquals("cat", vm.previewQuery)
+        vm.onPreviewFindResult(4)
+        assertEquals(4, vm.matchCount)
+        vm.find.query = ""
+        assertEquals(0, vm.matchCount)
+    }
+
+    @Test
     fun replaceCurrent_replacesOneMatchAsOneUndoStep() {
         val vm = openForFind("cat cat cat")
         vm.find.query = "cat"
