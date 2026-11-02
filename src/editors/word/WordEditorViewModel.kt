@@ -568,7 +568,7 @@ class WordEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
             dirty = true
         }
         val (count, readOnly) = counts
-        val replaced = FindMessages.replaced(count)
+        val replaced = FindMessages.replaced(count, replacement.isEmpty())
         find.message = if (readOnly == 0) replaced else FindMessage("${replaced.text}, skipped $readOnly read-only paragraphs", isError = false)
     }
 

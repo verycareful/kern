@@ -41,6 +41,9 @@ class FindState {
         }
     var replacement by mutableStateOf("")
 
+    /** An empty replacement deletes what it replaces; the bar says so before the user presses anything. */
+    val deletes: Boolean get() = replacement.isEmpty()
+
     /** Index of the current match among the editor's matches. */
     var current by mutableIntStateOf(0)
         private set
@@ -138,7 +141,11 @@ interface FindTarget {
 
 /** Shared wording for the replace results the bar shows. */
 object FindMessages {
-    fun replaced(count: Int) = FindMessage(if (count == 1) "Replaced 1 match" else "Replaced $count matches", isError = false)
+    /** How many matches a replace changed; [deleted] when the replacement was empty. */
+    fun replaced(count: Int, deleted: Boolean = false): FindMessage {
+        val verb = if (deleted) "Deleted" else "Replaced"
+        return FindMessage(if (count == 1) "$verb 1 match" else "$verb $count matches", isError = false)
+    }
 
     fun failed(error: Throwable) = FindMessage(error.message ?: "Could not replace", isError = true)
 }

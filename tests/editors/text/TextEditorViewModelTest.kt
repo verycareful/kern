@@ -211,6 +211,15 @@ class TextEditorViewModelTest {
     }
 
     @Test
+    fun emptyReplacement_deletesTheMatchesAndSaysSo() {
+        val vm = openForFind("a cat, a cat")
+        vm.find.query = " cat"
+        vm.replaceAll()
+        assertEquals("a, a", vm.state.text.toString())
+        assertEquals("Deleted 2 matches", vm.find.message?.text)
+    }
+
+    @Test
     fun badReplacement_changesNothingAndShowsTheError() {
         val vm = openForFind("ab ab")
         vm.find.regex = true

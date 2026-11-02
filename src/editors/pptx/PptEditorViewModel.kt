@@ -340,7 +340,7 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
             pushHistory()
             for ((shape, result) in changes) setShapeText(shape, result.value)
         }
-        find.message = FindMessages.replaced(changes.sumOf { it.second.count })
+        find.message = FindMessages.replaced(changes.sumOf { it.second.count }, find.deletes)
     }
 
     private fun setShapeText(shape: ShapeState, text: AnnotatedString) {

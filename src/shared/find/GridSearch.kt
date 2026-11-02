@@ -57,10 +57,10 @@ object GridSearch {
     }
 
     /** The bar's note after a replace all that left formula cells alone. */
-    fun replacedMessage(result: GridReplaceAll): FindMessage = when (result.skippedCells) {
-        0 -> FindMessages.replaced(result.replaced)
+    fun replacedMessage(result: GridReplaceAll, deleted: Boolean = false): FindMessage = when (result.skippedCells) {
+        0 -> FindMessages.replaced(result.replaced, deleted)
         else -> FindMessage(
-            FindMessages.replaced(result.replaced).text + ", " + skippedText(result.skippedCells),
+            FindMessages.replaced(result.replaced, deleted).text + ", " + skippedText(result.skippedCells),
             isError = false,
         )
     }

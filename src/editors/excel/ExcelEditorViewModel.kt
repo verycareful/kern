@@ -126,7 +126,7 @@ class ExcelEditorViewModel(app: Application) : AndroidViewModel(app), GridFindTa
         GridSearch.replaceAll(finder, sheetGrids, find.replacement, locked = ::isFormula)
             .onSuccess { result ->
                 for ((ref, value) in result.values) setCell(ref, value)
-                find.message = GridSearch.replacedMessage(result)
+                find.message = GridSearch.replacedMessage(result, find.deletes)
             }
             .onFailure { find.message = FindMessages.failed(it) }
     }

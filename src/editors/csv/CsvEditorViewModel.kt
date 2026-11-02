@@ -73,7 +73,7 @@ class CsvEditorViewModel(app: Application) : AndroidViewModel(app), GridFindTarg
             .onSuccess { result ->
                 for ((ref, value) in result.values) rows[ref.row][ref.col] = value
                 if (result.values.isNotEmpty()) dirty = true
-                find.message = GridSearch.replacedMessage(result)
+                find.message = GridSearch.replacedMessage(result, find.deletes)
             }
             .onFailure { find.message = FindMessages.failed(it) }
     }

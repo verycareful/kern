@@ -115,9 +115,19 @@ class FindStateTest {
     }
 
     @Test
+    fun anEmptyReplacement_deletes() {
+        val find = FindState()
+        assertTrue(find.deletes)
+        find.replacement = "x"
+        assertFalse(find.deletes)
+    }
+
+    @Test
     fun messages_readNaturally() {
         assertEquals(FindMessage("Replaced 1 match", isError = false), FindMessages.replaced(1))
         assertEquals(FindMessage("Replaced 4 matches", isError = false), FindMessages.replaced(4))
+        assertEquals(FindMessage("Deleted 1 match", isError = false), FindMessages.replaced(1, deleted = true))
+        assertEquals(FindMessage("Deleted 3 matches", isError = false), FindMessages.replaced(3, deleted = true))
         assertEquals(FindMessage("No group 2", isError = true), FindMessages.failed(InvalidReplacementException("No group 2")))
     }
 

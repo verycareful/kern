@@ -114,7 +114,7 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
                 OptionChip("Aa", "Match case", selected = options && find.matchCase, enabled = options) {
                     find.matchCase = !find.matchCase
                 }
-                OptionChip(".*", "Regular expression", selected = options && find.regex, enabled = options) {
+                OptionChip("Regex", "Regular expression", selected = options && find.regex, enabled = options) {
                     find.regex = !find.regex
                 }
                 val invalid = if (options) find.compiled as? FindQuery.Invalid else null
@@ -146,13 +146,19 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
                     FindField(
                         value = find.replacement,
                         onValueChange = { find.replacement = it },
-                        placeholder = if (find.regex && target.supportsOptions) "Replace (\$1 for group 1)" else "Replace with",
+                        placeholder = "Empty: matches are deleted",
                         imeAction = ImeAction.Done,
                         onIme = target::replaceCurrent,
                         modifier = Modifier.weight(1f),
                     )
-                    ToolbarButton(KernIcons.Pen, "Replace this match", onClick = target::replaceCurrent, label = "Replace", enabled = count > 0)
-                    ToolbarButton(KernIcons.Check, "Replace all matches", onClick = target::replaceAll, label = "All", enabled = count > 0)
+                    // An empty replacement deletes, so the buttons say so rather than surprise anyone.
+                    if (find.deletes) {
+                        ToolbarButton(KernIcons.Trash, "Delete this match", onClick = target::replaceCurrent, label = "Delete", enabled = count > 0)
+                        ToolbarButton(KernIcons.Trash, "Delete all matches", onClick = target::replaceAll, label = "All", enabled = count > 0)
+                    } else {
+                        ToolbarButton(KernIcons.Pen, "Replace this match", onClick = target::replaceCurrent, label = "Replace", enabled = count > 0)
+                        ToolbarButton(KernIcons.Check, "Replace all matches", onClick = target::replaceAll, label = "All", enabled = count > 0)
+                    }
                 }
             }
         }

@@ -113,7 +113,7 @@ class TextEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
         state.edit {
             for (i in matches.indices.reversed()) replace(matches[i].start, matches[i].end, values[i])
         }
-        find.message = FindMessages.replaced(matches.size)
+        find.message = FindMessages.replaced(matches.size, find.deletes)
     }
 
     private var document: TextDocument? = null

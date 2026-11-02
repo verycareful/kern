@@ -110,7 +110,7 @@ class EpubEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
         }
         val changes = outcome.getOrElse { find.message = FindMessages.failed(it); return }
         for ((c, block, result) in changes) setBlockText(c, block, result.value)
-        find.message = FindMessages.replaced(changes.sumOf { it.third.count })
+        find.message = FindMessages.replaced(changes.sumOf { it.third.count }, find.deletes)
     }
 
     fun goToChapter(index: Int) {
