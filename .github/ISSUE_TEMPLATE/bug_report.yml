@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in Kern does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please fill in every required field: a report without the version, device and steps usually needs a round of questions before anyone can look at it.
+        Security problems go through [SECURITY.md](https://github.com/verycareful/kern/blob/main/SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Kern version
+      description: Settings > About > Version.
+      placeholder: 0.1.14.1
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android version and device
+      placeholder: Android 15, Samsung Galaxy S23
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: File type
+      options:
+        - PDF
+        - Word (.docx, .doc)
+        - Excel (.xlsx, .xls)
+        - PowerPoint (.pptx, .ppt)
+        - CSV
+        - EPUB
+        - Markdown
+        - Plain text
+        - Not about a file (browser, settings, other)
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: How the file was opened
+      options:
+        - From Kern's own file browser
+        - With "Open with" from another app
+        - Through the system file picker
+        - Not about opening a file
+    validations:
+      required: true
+  - type: input
+    id: source_app
+    attributes:
+      label: Which app it came from
+      description: For "Open with", the app you opened it from (Gmail, Files, Drive, WhatsApp).
+      placeholder: Gmail
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Start from a fresh launch of Kern.
+      placeholder: |
+        1. Open a .docx attachment in Gmail
+        2. Tap Open with > Kern
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Include the exact text of any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots or the file
+      description: Drag files here. If the file is private, describe it instead (size, how it was made, what it contains).
