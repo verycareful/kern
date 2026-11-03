@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +49,7 @@ import dev.kern.shared.theme.KernTheme
 import dev.kern.shared.theme.KernType
 
 private val FIELD_TEXT_SIZE = 14.sp
+private val CLEAR_ICON_SIZE = 18.dp
 private const val MATCH_ALPHA = 0.28f
 private const val CURRENT_MATCH_ALPHA = 0.7f
 
@@ -94,6 +98,7 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
                     value = find.query,
                     onValueChange = { find.query = it },
                     placeholder = "Find",
+                    clearDescription = "Clear search",
                     trailing = countLabel(find.query, count, find.currentIn(count), invalid = target.supportsOptions && find.compiled is FindQuery.Invalid),
                     trailingIsWarning = find.query.isNotEmpty() && count == 0,
                     imeAction = ImeAction.Search,
@@ -147,6 +152,7 @@ fun FindBar(target: FindTarget, modifier: Modifier = Modifier) {
                         value = find.replacement,
                         onValueChange = { find.replacement = it },
                         placeholder = "Empty: matches are deleted",
+                        clearDescription = "Clear replacement",
                         imeAction = ImeAction.Done,
                         onIme = target::replaceCurrent,
                         modifier = Modifier.weight(1f),
@@ -177,6 +183,7 @@ private fun FindField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
+    clearDescription: String,
     imeAction: ImeAction,
     onIme: () -> Unit,
     modifier: Modifier = Modifier,
@@ -210,6 +217,19 @@ private fun FindField(
                         style = KernType.meta,
                         color = if (trailingIsWarning) colors.danger else colors.textMid,
                         modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                // The bar keeps its query between openings, so the field offers its own way to empty it.
+                if (value.isNotEmpty() && enabled) {
+                    Icon(
+                        KernIcons.Clear,
+                        contentDescription = clearDescription,
+                        tint = colors.textDim,
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(CLEAR_ICON_SIZE)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button) { onValueChange("") },
                     )
                 }
             }

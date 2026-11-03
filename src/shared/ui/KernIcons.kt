@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.BorderColor
 import androidx.compose.material.icons.outlined.CallMerge
 import androidx.compose.material.icons.outlined.CallSplit
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Close
@@ -135,6 +136,7 @@ object KernIcons {
     val Merge = Icons.Outlined.CallMerge
     val Split = Icons.Outlined.CallSplit
     val Close = Icons.Outlined.Close
+    val Clear = Icons.Outlined.Cancel
     val Filter = Icons.Outlined.FilterList
     val Folder = Icons.Outlined.Folder
     val Doc = Icons.Outlined.Description

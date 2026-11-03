@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.14.2] - 2026-11-03 18:37 IST
+
+### Added
+- **Clear Find Field**: the find bar keeps its search between openings, and the find and replace fields now each show a clear button while they hold text. Tapping it empties the field, which clears the matches and their highlights as deleting the text by hand does
+
+### Results
+- 363 tests across 34 suites, all passed (10s, local Gradle `testDebugUnitTest`); lint: no errors
+
 ## [0.1.14.1] - 2026-11-03 09:50 IST
 
 ### Fixed
