@@ -2,6 +2,14 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.14.3] - 2026-11-03 18:47 IST
+
+### Fixed
+- **File Actions in Grid Layout** (closes #38): in grid layout a file's actions (pin, share, delete, details) could not be reached, since only the list layout's rows had a menu button. Every grid tile, and every pinned card in Recent, now has the same menu button at its bottom right
+
+### Results
+- 363 tests across 34 suites, all passed (10s, local Gradle `testDebugUnitTest`); lint: no errors
+
 ## [0.1.14.2] - 2026-11-03 18:37 IST
 
 ### Added

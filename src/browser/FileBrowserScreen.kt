@@ -544,16 +544,19 @@ private fun FileCard(doc: ScannedDoc, pinned: Boolean, onOpen: (ScannedDoc) -> U
                 )
             }
         }
-        Column(Modifier.padding(10.dp)) {
-            Text(doc.name, style = KernType.body.copy(fontSize = 13.sp), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                "${prettySize(doc.size)}  ·  ${prettyDate(doc.modified)}",
-                style = KernType.caption,
-                color = colors.textMid,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(start = 10.dp, top = 10.dp, bottom = 10.dp)) {
+                Text(doc.name, style = KernType.body.copy(fontSize = 13.sp), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${prettySize(doc.size)}  ·  ${prettyDate(doc.modified)}",
+                    style = KernType.caption,
+                    color = colors.textMid,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            KernIconButton(KernIcons.More, "More", { onMore(doc) }, iconSize = 18.dp)
         }
     }
 }
