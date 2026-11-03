@@ -227,11 +227,11 @@ class PptEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
             return pending?.transform?.invoke(atCaret) ?: atCaret
         }
 
-    fun start(encodedUri: String?) {
+    fun start(routeArgument: String?) {
         if (started) return
         started = true
         val ctx = getApplication<Application>()
-        val decoded = encodedUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(Uri.decode(it)) }
+        val decoded = DocumentIo.fromRouteArgument(routeArgument)
         if (decoded == null) {
             loading = false
             error = "No file was provided."

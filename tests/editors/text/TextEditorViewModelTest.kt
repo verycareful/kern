@@ -40,7 +40,7 @@ class TextEditorViewModelTest {
     private fun open(name: String, bytes: ByteArray, format: DocumentFormat): Pair<TextEditorViewModel, File> {
         val file = File(dir, name).apply { writeBytes(bytes) }
         val vm = TextEditorViewModel(RuntimeEnvironment.getApplication())
-        vm.start(Uri.encode(Uri.fromFile(file.absoluteFile).toString()), format)
+        vm.start(Uri.fromFile(file.absoluteFile).toString(), format)
         waitFor { !vm.loading }
         return vm to file
     }
@@ -126,7 +126,7 @@ class TextEditorViewModelTest {
     @Test
     fun missingFile_reportsAnError() {
         val vm = TextEditorViewModel(RuntimeEnvironment.getApplication())
-        vm.start(Uri.encode(Uri.fromFile(File(dir, "absent.md").absoluteFile).toString()), DocumentFormat.MARKDOWN)
+        vm.start(Uri.fromFile(File(dir, "absent.md").absoluteFile).toString(), DocumentFormat.MARKDOWN)
         waitFor { !vm.loading }
         assertNotNull(vm.error)
     }

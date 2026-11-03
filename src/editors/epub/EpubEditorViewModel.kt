@@ -120,11 +120,11 @@ class EpubEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
     fun nextChapter() = goToChapter(currentChapter + 1)
     fun previousChapter() = goToChapter(currentChapter - 1)
 
-    fun start(encodedUri: String?) {
+    fun start(routeArgument: String?) {
         if (started) return
         started = true
         val ctx = getApplication<Application>()
-        val decoded = encodedUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(Uri.decode(it)) }
+        val decoded = DocumentIo.fromRouteArgument(routeArgument)
         if (decoded == null) {
             loading = false
             error = "No file was provided."

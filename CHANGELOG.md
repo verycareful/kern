@@ -2,6 +2,19 @@
 
 All notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/), with one deviation: dated release entries are timestamped to the minute with timezone (`YYYY-MM-DD HH:MM (TZ)`).
 
+## [0.1.14.1] - 2026-11-03 09:50 IST
+
+### Fixed
+- **Files That Would Not Open** (closes #35): a file opened from another app whose address carries escaped characters, such as a Gmail attachment, failed with a permission denial, and so did any file whose name contains `#`, `%` or `?`. The address was decoded twice on its way to the editor, which turned an escaped `#` into a real one and named a different file from the one Kern had been given access to. It is now decoded once (`DocumentIo.fromRouteArgument`), in every editor
+- **Markdown Preview Scroll Indicator**: with Kern on Light and the system in dark mode, the preview's own scroll indicator was pale on the white page and could not be seen; it now follows Kern's theme
+
+### Tests
+- **Route URIs** (`RouteUriTest.kt`): a Gmail attachment address keeping its escaped `#` and query, a storage document keeping its escaped separators, a file name containing `#`, a blank argument
+- **Editors** (Robolectric): the CSV, Excel, Word, PowerPoint, EPUB and text editor tests open their file with the address as the editor receives it
+
+### Results
+- 363 tests across 34 suites, all passed (8s, local Gradle `testDebugUnitTest`); lint clean
+
 ## [0.1.14.0] - 2026-11-02 17:05 IST
 
 ### Added

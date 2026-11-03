@@ -124,12 +124,12 @@ class TextEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget 
     private var renderJob: Job? = null
     private var renderedText: String? = null
 
-    /** Loads the document once for the given encoded URI (safe to call on recomposition). */
-    fun start(encodedUri: String?, format: DocumentFormat) {
+    /** Loads the document once for the URI in an editor route argument (safe to call on recomposition). */
+    fun start(routeArgument: String?, format: DocumentFormat) {
         if (started) return
         started = true
         val ctx = getApplication<Application>()
-        val decoded = encodedUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(Uri.decode(it)) }
+        val decoded = DocumentIo.fromRouteArgument(routeArgument)
         if (decoded == null) {
             loading = false
             error = "No file was provided."

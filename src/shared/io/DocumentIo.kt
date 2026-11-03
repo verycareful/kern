@@ -17,6 +17,16 @@ import java.io.IOException
  */
 object DocumentIo {
 
+    /**
+     * The document URI an editor route argument names, or null when there is none.
+     * The route carries `Uri.encode(uri)` and Navigation decodes path arguments once
+     * before handing them over, so the argument is already the URI string. Decoding
+     * it again would turn a provider's escapes into syntax (Gmail's `%23` becomes a
+     * fragment) and name a URI the caller holds no grant for.
+     */
+    fun fromRouteArgument(argument: String?): Uri? =
+        argument?.takeIf { it.isNotBlank() }?.let(Uri::parse)
+
     /** Reads the whole document as bytes. Throws IOException if the URI can't be opened. */
     fun readBytes(context: Context, uri: Uri): ByteArray {
         // Files from the in-app browser scan arrive as file:// URIs (MANAGE_EXTERNAL_STORAGE);

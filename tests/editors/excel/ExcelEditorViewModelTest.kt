@@ -55,7 +55,7 @@ class ExcelEditorViewModelTest {
         }
         val file = File(dir, "book.xlsx").apply { writeBytes(out.toByteArray()) }
         val vm = ExcelEditorViewModel(RuntimeEnvironment.getApplication())
-        vm.start(Uri.encode(Uri.fromFile(file.absoluteFile).toString()))
+        vm.start(Uri.fromFile(file.absoluteFile).toString())
         waitFor { !vm.loading }
         vm.find.open()
         vm.find.matchCase = false

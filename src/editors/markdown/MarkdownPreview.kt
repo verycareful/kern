@@ -3,6 +3,7 @@ package dev.kern.editors.markdown
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color as AndroidColor
+import android.view.ContextThemeWrapper
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -10,6 +11,7 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,34 +64,43 @@ fun MarkdownPreview(
     val background = colors.bg.toArgb()
     val scrollTarget = remember { WebViewScrollTarget() }
     FastScrollBox(scrollTarget, hue, modifier) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                PreviewWebView(context).apply {
-                    scrollTarget.view = this
-                    setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                        scrollTarget.scrollY = scrollY
-                        currentOnScroll()
+        // The WebView draws its scroll indicator from its Context's theme, which is
+        // the window theme and follows the system's night mode, not Kern's. It is
+        // built on a theme matching Kern's, and rebuilt when that flips.
+        key(colors.dark) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    PreviewWebView(ContextThemeWrapper(context, indicatorTheme(colors.dark))).apply {
+                        scrollTarget.view = this
+                        setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                            scrollTarget.scrollY = scrollY
+                            currentOnScroll()
+                        }
+                        this.onFindResult = { current, total -> currentOnFindResult(current, total) }
+                        onExternalLink = { pendingLink = it }
                     }
-                    this.onFindResult = { current, total -> currentOnFindResult(current, total) }
-                    onExternalLink = { pendingLink = it }
-                }
-            },
-            update = { view ->
-                view.setBackgroundColor(background)
-                if (view.tag != page) {
-                    view.tag = page
-                    view.loadDataWithBaseURL(MarkdownPage.BASE_URL, page, "text/html", "utf-8", null)
-                }
-                view.find(findQuery, findCurrent)
-            },
-            onRelease = {
-                scrollTarget.view = null
-                it.destroy()
-            },
-        )
+                },
+                update = { view ->
+                    view.setBackgroundColor(background)
+                    if (view.tag != page) {
+                        view.tag = page
+                        view.loadDataWithBaseURL(MarkdownPage.BASE_URL, page, "text/html", "utf-8", null)
+                    }
+                    view.find(findQuery, findCurrent)
+                },
+                onRelease = {
+                    if (scrollTarget.view === it) scrollTarget.view = null
+                    it.destroy()
+                },
+            )
+        }
     }
 }
+
+/** A platform theme whose scroll indicator stands out on Kern's light or dark page. */
+private fun indicatorTheme(dark: Boolean): Int =
+    if (dark) android.R.style.Theme_Material_NoActionBar else android.R.style.Theme_Material_Light_NoActionBar
 
 /** A WebView that reports its vertical scroll range, which [WebView] keeps protected. */
 @SuppressLint("SetJavaScriptEnabled", "ViewConstructor")

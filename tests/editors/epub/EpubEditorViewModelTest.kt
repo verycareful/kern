@@ -72,7 +72,7 @@ class EpubEditorViewModelTest {
     private fun open(): EpubEditorViewModel {
         val file = File(dir, "book.epub").apply { writeBytes(book()) }
         val vm = EpubEditorViewModel(RuntimeEnvironment.getApplication())
-        vm.start(Uri.encode(Uri.fromFile(file.absoluteFile).toString()))
+        vm.start(Uri.fromFile(file.absoluteFile).toString())
         waitFor { !vm.loading }
         vm.find.open()
         vm.find.query = "cat"

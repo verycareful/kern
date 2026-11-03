@@ -155,11 +155,11 @@ class PdfEditorViewModel(app: Application) : AndroidViewModel(app), FindTarget {
     /** Whether the native PDF engine is bundled in this build. */
     val engineAvailable: Boolean get() = QyraPdf.available
 
-    fun start(encodedUri: String?) {
+    fun start(routeArgument: String?) {
         if (started) return
         started = true
         val ctx = getApplication<Application>()
-        val decoded = encodedUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(Uri.decode(it)) }
+        val decoded = DocumentIo.fromRouteArgument(routeArgument)
         if (decoded == null) {
             loading = false
             error = "No file was provided."

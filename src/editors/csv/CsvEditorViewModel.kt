@@ -101,12 +101,12 @@ class CsvEditorViewModel(app: Application) : AndroidViewModel(app), GridFindTarg
 
     val columnCount: Int get() = rows.firstOrNull()?.size ?: 0
 
-    /** Loads the document once for the given encoded content URI (safe to call on recomposition). */
-    fun start(encodedUri: String?) {
+    /** Loads the document once for the URI in an editor route argument (safe to call on recomposition). */
+    fun start(routeArgument: String?) {
         if (started) return
         started = true
         val ctx = getApplication<Application>()
-        val decoded = encodedUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(Uri.decode(it)) }
+        val decoded = DocumentIo.fromRouteArgument(routeArgument)
         if (decoded == null) {
             loading = false
             error = "No file was provided."

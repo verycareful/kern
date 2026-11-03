@@ -19,8 +19,8 @@ android {
         applicationId = "dev.kern"
         minSdk = 26
         targetSdk = 35
-        versionCode = 33
-        versionName = "0.1.14.0"
+        versionCode = 34
+        versionName = "0.1.14.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
