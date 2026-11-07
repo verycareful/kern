@@ -10,6 +10,9 @@ issue, pull request or discussion about it.
 Include the Kern version (Settings > About > Version), the Android version and
 device, and the steps or the file that triggers the problem.
 
+Kern is maintained by one person. I aim to acknowledge a report within 7 days, and I
+cannot promise a date for the fix.
+
 ## What counts
 
 Kern opens files from any source, so a crafted document is the main attack surface.
